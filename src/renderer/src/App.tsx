@@ -4,7 +4,6 @@ import { Sidebar } from './components/layout/Sidebar';
 import { SqlEditor } from './components/editor/SqlEditor';
 import { DataGrid } from './components/grid/DataGrid';
 import { ConnectionDrawer } from './components/connections/ConnectionDrawer';
-import { SampleDatabasesDrawer } from './components/connections/SampleDatabasesDrawer';
 import { AddRowDrawer } from './components/grid/AddRowDrawer';
 import { FloatingPromptBar } from './components/layout/FloatingPromptBar';
 
@@ -45,7 +44,6 @@ export const App: React.FC = () => {
 
   // Drawers
   const [isConnectionDrawerOpen, setIsConnectionDrawerOpen] = useState(false);
-  const [isSamplesDrawerOpen, setIsSamplesDrawerOpen] = useState(false);
   const [isAddRowDrawerOpen, setIsAddRowDrawerOpen] = useState(false);
 
   // Toast feedback
@@ -63,15 +61,10 @@ export const App: React.FC = () => {
 
   const initApp = async () => {
     try {
-      const samples = await safeApi.getSampleDatabases();
-      if (samples && samples.length > 0) {
-        const firstSample = samples[0];
-        await handleConnect({
-          id: `conn_${firstSample.type}`,
-          name: firstSample.name,
-          type: firstSample.type,
-          filePath: firstSample.filePath
-        });
+      const active = await safeApi.getActiveConnections();
+      if (active && active.length > 0) {
+        setSavedConnections(active);
+        await handleConnect(active[0]);
       }
     } catch (err: any) {
       console.warn('Initial connection notice:', err);
@@ -306,7 +299,6 @@ export const App: React.FC = () => {
       <Header
         activeConnection={activeConnection}
         onOpenNewConnection={() => setIsConnectionDrawerOpen(true)}
-        onOpenSamples={() => setIsSamplesDrawerOpen(true)}
         onRefreshSchema={handleRefreshSchema}
         isLoading={isLoading}
       />
@@ -413,12 +405,6 @@ export const App: React.FC = () => {
         isOpen={isConnectionDrawerOpen}
         onClose={() => setIsConnectionDrawerOpen(false)}
         onConnect={handleConnect}
-      />
-
-      <SampleDatabasesDrawer
-        isOpen={isSamplesDrawerOpen}
-        onClose={() => setIsSamplesDrawerOpen(false)}
-        onConnectSample={handleConnect}
       />
 
       {selectedTable && (

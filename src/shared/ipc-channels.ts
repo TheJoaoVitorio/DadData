@@ -22,11 +22,7 @@ export const IPC_CHANNELS = {
   DIALOG_SAVE_FILE: 'dialog:save-file',
   
   // Export engine
-  EXPORT_TABLE_OR_QUERY: 'export:table-or-query',
-
-  // Samples loader
-  SAMPLES_GET_LIST: 'samples:get-list',
-  SAMPLES_LOAD: 'samples:load'
+  EXPORT_TABLE_OR_QUERY: 'export:table-or-query'
 } as const;
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];

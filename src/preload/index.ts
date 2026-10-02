@@ -39,10 +39,7 @@ export const api = {
 
   // Export
   exportData: (connectionId: string, options: ExportOptions) =>
-    ipcRenderer.invoke(IPC_CHANNELS.EXPORT_TABLE_OR_QUERY, connectionId, options),
-
-  // Samples
-  getSampleDatabases: () => ipcRenderer.invoke(IPC_CHANNELS.SAMPLES_GET_LIST),
+    ipcRenderer.invoke(IPC_CHANNELS.EXPORT_TABLE_OR_QUERY, connectionId, options)
 };
 
 contextBridge.exposeInMainWorld('api', api);

@@ -40,8 +40,7 @@ O projeto conta com agentes dedicados e documentados em `AGENTS.md` e `.agents/s
 ## ✨ Funcionalidades Principais
 
 1. **Conexão Universal**:
-   - Conecte-se tanto a servidores de banco de dados remotos quanto a arquivos locais legados (.dbf, .db, .fic, .mdb, .sqlite) com diálogo nativo de busca de arquivos e pastas.
-   - **Bancos de Amostra com 1 Clique**: Teste imediato com bases de amostra incluídas na pasta `samples/`.
+   - Conecte-se tanto a servidores de banco de dados remotos quanto a arquivos locais legados (.dbf, .db, .fic, .mdb, .sqlite, .nx1, .fdb) com diálogo nativo de busca de arquivos e pastas no Windows/Desktop.
 2. **Editor SQL / NoSQL**:
    - Card escuro no estilo Nocra UI com atalhos de sintaxe (`SELECT *`, `WHERE`, `ORDER BY`, `COUNT(*)`).
    - Execução rápida com atalho `Ctrl+Enter`.

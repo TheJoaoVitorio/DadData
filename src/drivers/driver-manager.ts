@@ -131,49 +131,49 @@ export class DriverManager {
     return driver.deleteRow(tableName, primaryKey);
   }
 
-  // Helper to ensure sample databases are created for instant testing
-  ensureSampleDatabases(samplesDir: string): { name: string; type: DatabaseType; filePath: string }[] {
-    if (!fs.existsSync(samplesDir)) {
-      fs.mkdirSync(samplesDir, { recursive: true });
+  // Helper for test fixtures in test suite
+  createTestDatabases(testOutputDir: string): { name: string; type: DatabaseType; filePath: string }[] {
+    if (!fs.existsSync(testOutputDir)) {
+      fs.mkdirSync(testOutputDir, { recursive: true });
     }
 
-    const samples: { name: string; type: DatabaseType; filePath: string }[] = [];
+    const testFiles: { name: string; type: DatabaseType; filePath: string }[] = [];
 
-    // 1. DBF Sample
-    const dbfPath = path.join(samplesDir, 'clientes_vendas.dbf');
+    // 1. DBF Test Fixture
+    const dbfPath = path.join(testOutputDir, 'clientes_vendas.dbf');
     if (!fs.existsSync(dbfPath)) {
       DbfParser.createSampleDbf(dbfPath);
     }
-    samples.push({ name: 'Clientes & Vendas (dBase/FoxPro)', type: 'dbf', filePath: dbfPath });
+    testFiles.push({ name: 'Clientes & Vendas (dBase/FoxPro)', type: 'dbf', filePath: dbfPath });
 
-    // 2. Paradox Sample
-    const paradoxPath = path.join(samplesDir, 'clientes_corp.db');
+    // 2. Paradox Test Fixture
+    const paradoxPath = path.join(testOutputDir, 'clientes_corp.db');
     if (!fs.existsSync(paradoxPath)) {
       ParadoxParser.createSampleParadox(paradoxPath);
     }
-    samples.push({ name: 'Clientes Corporativos (Paradox 7)', type: 'paradox', filePath: paradoxPath });
+    testFiles.push({ name: 'Clientes Corporativos (Paradox 7)', type: 'paradox', filePath: paradoxPath });
 
-    // 3. Access Sample
-    const accessPath = path.join(samplesDir, 'northwind.mdb');
+    // 3. Access Test Fixture
+    const accessPath = path.join(testOutputDir, 'northwind.mdb');
     if (!fs.existsSync(accessPath)) {
       AccessDriver.createSampleAccess(accessPath);
     }
-    samples.push({ name: 'Northwind Traders (Access MDB)', type: 'access', filePath: accessPath });
+    testFiles.push({ name: 'Northwind Traders (Access MDB)', type: 'access', filePath: accessPath });
 
-    // 4. HFSQL Sample
-    const hfsqlPath = path.join(samplesDir, 'produtos.fic');
+    // 4. HFSQL Test Fixture
+    const hfsqlPath = path.join(testOutputDir, 'produtos.fic');
     if (!fs.existsSync(hfsqlPath)) {
       HfsqlDriver.createSampleHfsql(hfsqlPath);
     }
-    samples.push({ name: 'Produtos & Estoque (HFSQL WinDev)', type: 'hfsql', filePath: hfsqlPath });
+    testFiles.push({ name: 'Produtos & Estoque (HFSQL WinDev)', type: 'hfsql', filePath: hfsqlPath });
 
-    // 5. NexusDB Sample
-    const nexusPath = path.join(samplesDir, 'contas.nx1');
+    // 5. NexusDB Test Fixture
+    const nexusPath = path.join(testOutputDir, 'contas.nx1');
     if (!fs.existsSync(nexusPath)) {
       NexusDbDriver.createSampleNexusDb(nexusPath);
     }
-    samples.push({ name: 'Contas Bancárias (NexusDB)', type: 'nexusdb', filePath: nexusPath });
+    testFiles.push({ name: 'Contas Bancárias (NexusDB)', type: 'nexusdb', filePath: nexusPath });
 
-    return samples;
+    return testFiles;
   }
 }

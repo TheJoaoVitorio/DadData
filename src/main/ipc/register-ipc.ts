@@ -7,10 +7,6 @@ import { ConnectionConfig, ExportOptions } from '../../shared/types/database';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const driverManager = DriverManager.getInstance();
-  const samplesDir = path.join(process.cwd(), 'samples');
-
-  // Ensure sample databases are ready
-  driverManager.ensureSampleDatabases(samplesDir);
 
   // 1. Connection Management
   ipcMain.handle(IPC_CHANNELS.DB_CONNECT, async (_event, config: ConnectionConfig) => {
@@ -134,9 +130,4 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       }
     }
   );
-
-  // 6. Samples
-  ipcMain.handle(IPC_CHANNELS.SAMPLES_GET_LIST, async () => {
-    return driverManager.ensureSampleDatabases(samplesDir);
-  });
 }

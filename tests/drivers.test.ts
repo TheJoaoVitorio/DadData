@@ -12,7 +12,7 @@ describe('DadData Database Drivers & Export Suite', () => {
     if (!fs.existsSync(testDir)) {
       fs.mkdirSync(testDir, { recursive: true });
     }
-    driverManager.ensureSampleDatabases(testDir);
+    driverManager.createTestDatabases(testDir);
   });
 
   describe('1. SQLite Driver & CRUD', () => {

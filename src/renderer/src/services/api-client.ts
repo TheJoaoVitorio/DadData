@@ -140,16 +140,5 @@ export const safeApi = {
       fileSizeBytes: 1024,
       message: 'Exportado com sucesso!'
     };
-  },
-
-  getSampleDatabases: async () => {
-    if (window.api) return window.api.getSampleDatabases();
-    return [
-      { name: 'Clientes & Vendas (dBase/FoxPro)', type: 'dbf', filePath: 'samples/clientes_vendas.dbf' },
-      { name: 'Clientes Corporativos (Paradox 7)', type: 'paradox', filePath: 'samples/clientes_corp.db' },
-      { name: 'Northwind Traders (Access MDB)', type: 'access', filePath: 'samples/northwind.mdb' },
-      { name: 'Produtos & Estoque (HFSQL WinDev)', type: 'hfsql', filePath: 'samples/produtos.fic' },
-      { name: 'Contas Bancárias (NexusDB)', type: 'nexusdb', filePath: 'samples/contas.nx1' }
-    ];
   }
 };

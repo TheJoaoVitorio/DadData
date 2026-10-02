@@ -1,12 +1,11 @@
 import React from 'react';
-import { Database, Plus, Sparkles, FolderArchive, Layers, RefreshCw } from 'lucide-react';
+import { Database, Plus, RefreshCw } from 'lucide-react';
 import { ConnectionConfig } from '@shared/types/database';
 import { DatabaseIcon } from '../icons/DatabaseIcon';
 
 interface HeaderProps {
   activeConnection: ConnectionConfig | null;
   onOpenNewConnection: () => void;
-  onOpenSamples: () => void;
   onRefreshSchema: () => void;
   isLoading: boolean;
 }
@@ -14,7 +13,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   activeConnection,
   onOpenNewConnection,
-  onOpenSamples,
   onRefreshSchema,
   isLoading
 }) => {
@@ -73,15 +71,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Header Actions */}
       <div className="flex items-center gap-3">
-        {/* Samples Button */}
-        <button
-          onClick={onOpenSamples}
-          className="h-10 px-4 rounded-full bg-white/80 hover:bg-white text-slate-700 border border-slate-200/80 hover:border-purple-300 text-xs font-semibold flex items-center gap-2 transition-all shadow-sm hover:shadow"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-          <span>Bancos de Amostra</span>
-        </button>
-
         {/* New Connection Button */}
         <button
           onClick={onOpenNewConnection}
