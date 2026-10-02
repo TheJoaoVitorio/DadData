@@ -26,18 +26,58 @@ export const safeApi = {
   listTables: async (connectionId: string): Promise<TableInfo[]> => {
     if (window.api) return window.api.listTables(connectionId);
     return [
-      { name: 'CLIENTES', type: 'table', rowCount: 5 },
-      { name: 'PRODUTOS', type: 'table', rowCount: 12 },
-      { name: 'VENDAS', type: 'table', rowCount: 28 }
+      { name: 'actor', type: 'table', rowCount: 200, schema: 'public' },
+      { name: 'address', type: 'table', rowCount: 603, schema: 'public' },
+      { name: 'category', type: 'table', rowCount: 16, schema: 'public' },
+      { name: 'city', type: 'table', rowCount: 600, schema: 'public' },
+      { name: 'country', type: 'table', rowCount: 109, schema: 'public' },
+      { name: 'customer', type: 'table', rowCount: 599, schema: 'public' },
+      { name: 'film', type: 'table', rowCount: 1000, schema: 'public' },
+      { name: 'film_actor', type: 'table', rowCount: 5462, schema: 'public' },
+      { name: 'film_category', type: 'table', rowCount: 1000, schema: 'public' },
+      { name: 'inventory', type: 'table', rowCount: 4581, schema: 'public' },
+      { name: 'language', type: 'table', rowCount: 6, schema: 'public' },
+      { name: 'payment', type: 'table', rowCount: 16049, schema: 'public' },
+      { name: 'rental', type: 'table', rowCount: 16044, schema: 'public' },
+      { name: 'staff', type: 'table', rowCount: 2, schema: 'public' },
+      { name: 'store', type: 'table', rowCount: 2, schema: 'public' },
+      { name: 'customer_list', type: 'view', rowCount: 599, schema: 'public' },
+      { name: 'film_list', type: 'view', rowCount: 1000, schema: 'public' },
+      { name: 'staff_list', type: 'view', rowCount: 2, schema: 'public' },
+      { name: 'sales_by_store', type: 'view', rowCount: 2, schema: 'analytics' }
     ];
   },
 
   describeTable: async (connectionId: string, tableName: string): Promise<ColumnInfo[]> => {
     if (window.api) return window.api.describeTable(connectionId, tableName);
+    if (tableName.toLowerCase().includes('customer')) {
+      return [
+        { name: 'customer_id', type: 'INTEGER', isPrimaryKey: true, nullable: false },
+        { name: 'store_id', type: 'TINYINT', isPrimaryKey: false, nullable: false },
+        { name: 'first_name', type: 'VARCHAR(45)', isPrimaryKey: false, nullable: false },
+        { name: 'last_name', type: 'VARCHAR(45)', isPrimaryKey: false, nullable: false },
+        { name: 'email', type: 'VARCHAR(50)', isPrimaryKey: false, nullable: true },
+        { name: 'address_id', type: 'SMALLINT', isPrimaryKey: false, nullable: false },
+        { name: 'active', type: 'BOOLEAN', isPrimaryKey: false, nullable: false },
+        { name: 'create_date', type: 'DATETIME', isPrimaryKey: false, nullable: false }
+      ];
+    }
+    if (tableName.toLowerCase().includes('film')) {
+      return [
+        { name: 'film_id', type: 'INTEGER', isPrimaryKey: true, nullable: false },
+        { name: 'title', type: 'VARCHAR(255)', isPrimaryKey: false, nullable: false },
+        { name: 'description', type: 'TEXT', isPrimaryKey: false, nullable: true },
+        { name: 'release_year', type: 'YEAR', isPrimaryKey: false, nullable: true },
+        { name: 'rental_duration', type: 'TINYINT', isPrimaryKey: false, nullable: false },
+        { name: 'rental_rate', type: 'DECIMAL(4,2)', isPrimaryKey: false, nullable: false },
+        { name: 'length', type: 'SMALLINT', isPrimaryKey: false, nullable: true },
+        { name: 'rating', type: 'VARCHAR(10)', isPrimaryKey: false, nullable: true }
+      ];
+    }
     return [
-      { name: 'CODIGO', type: 'INTEGER', isPrimaryKey: true, nullable: false },
-      { name: 'NOME', type: 'VARCHAR(40)', isPrimaryKey: false, nullable: false },
-      { name: 'VALOR', type: 'NUMERIC(12,2)', isPrimaryKey: false, nullable: false }
+      { name: 'id', type: 'INTEGER', isPrimaryKey: true, nullable: false },
+      { name: 'name', type: 'VARCHAR(100)', isPrimaryKey: false, nullable: false },
+      { name: 'created_at', type: 'TIMESTAMP', isPrimaryKey: false, nullable: false }
     ];
   },
 

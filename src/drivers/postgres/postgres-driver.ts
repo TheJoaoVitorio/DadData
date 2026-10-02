@@ -13,7 +13,10 @@ export class PostgresDriver implements DatabaseDriver {
   readonly type = 'postgres';
   private config: ConnectionConfig | null = null;
   private isConnected = false;
-  private mockTables: Map<string, { columns: ColumnInfo[]; rows: Record<string, any>[] }> = new Map();
+  private mockTables: Map<
+    string,
+    { schema: string; type: 'table' | 'view'; columns: ColumnInfo[]; rows: Record<string, any>[] }
+  > = new Map();
 
   async connect(config: ConnectionConfig): Promise<ConnectionResult> {
     this.config = config;
@@ -48,8 +51,8 @@ export class PostgresDriver implements DatabaseDriver {
     for (const [name, data] of this.mockTables.entries()) {
       tables.push({
         name,
-        schema: 'public',
-        type: 'table',
+        schema: data.schema,
+        type: data.type,
         rowCount: data.rows.length
       });
     }
@@ -57,8 +60,9 @@ export class PostgresDriver implements DatabaseDriver {
   }
 
   async describeTable(tableName: string): Promise<ColumnInfo[]> {
-    const table = this.mockTables.get(tableName);
-    if (!table) throw new Error(`Table public.${tableName} does not exist`);
+    const cleanName = tableName.includes('.') ? tableName.split('.').pop()! : tableName;
+    const table = this.mockTables.get(cleanName);
+    if (!table) throw new Error(`Entity ${tableName} does not exist`);
     return table.columns;
   }
 
@@ -189,7 +193,67 @@ export class PostgresDriver implements DatabaseDriver {
       { log_id: 102, user_id: '2c8e7dae-ccfe-4c3e-8c6e-bc9eacca5cfe', action: 'SCHEMA_MIGRATION_V2', ip_address: '192.168.1.75', timestamp: '2024-04-02 18:25:30' }
     ];
 
-    this.mockTables.set('users', { columns: usersColumns, rows: usersRows });
-    this.mockTables.set('audit_logs', { columns: auditColumns, rows: auditRows });
+    this.mockTables.set('users', {
+      schema: 'public',
+      type: 'table',
+      columns: usersColumns,
+      rows: usersRows
+    });
+
+    this.mockTables.set('audit_logs', {
+      schema: 'public',
+      type: 'table',
+      columns: auditColumns,
+      rows: auditRows
+    });
+
+    // View in public schema
+    const activeUsersColumns: ColumnInfo[] = [
+      { name: 'id', type: 'uuid', isPrimaryKey: true, nullable: false },
+      { name: 'email', type: 'varchar(255)', isPrimaryKey: false, nullable: false },
+      { name: 'full_name', type: 'text', isPrimaryKey: false, nullable: false },
+      { name: 'role', type: 'varchar(50)', isPrimaryKey: false, nullable: false }
+    ];
+    this.mockTables.set('active_users_view', {
+      schema: 'public',
+      type: 'view',
+      columns: activeUsersColumns,
+      rows: usersRows.map(({ created_at, ...rest }) => rest)
+    });
+
+    // Analytics schema
+    const revenueColumns: ColumnInfo[] = [
+      { name: 'month_year', type: 'varchar(7)', isPrimaryKey: true, nullable: false },
+      { name: 'total_revenue', type: 'numeric(14,2)', isPrimaryKey: false, nullable: false },
+      { name: 'active_subscribers', type: 'integer', isPrimaryKey: false, nullable: false }
+    ];
+    const revenueRows = [
+      { month_year: '2024-01', total_revenue: 125430.00, active_subscribers: 1240 },
+      { month_year: '2024-02', total_revenue: 142100.50, active_subscribers: 1390 },
+      { month_year: '2024-03', total_revenue: 168900.00, active_subscribers: 1580 }
+    ];
+    this.mockTables.set('monthly_revenue', {
+      schema: 'analytics',
+      type: 'table',
+      columns: revenueColumns,
+      rows: revenueRows
+    });
+
+    // Analytics view
+    const customerSummaryColumns: ColumnInfo[] = [
+      { name: 'category', type: 'varchar(50)', isPrimaryKey: true, nullable: false },
+      { name: 'total_customers', type: 'integer', isPrimaryKey: false, nullable: false },
+      { name: 'avg_ltv', type: 'numeric(10,2)', isPrimaryKey: false, nullable: false }
+    ];
+    const customerSummaryRows = [
+      { category: 'Enterprise', total_customers: 42, avg_ltv: 24500.00 },
+      { category: 'Pro SMB', total_customers: 218, avg_ltv: 4200.00 }
+    ];
+    this.mockTables.set('customer_summary_view', {
+      schema: 'analytics',
+      type: 'view',
+      columns: customerSummaryColumns,
+      rows: customerSummaryRows
+    });
   }
 }

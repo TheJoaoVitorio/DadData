@@ -1,18 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Table as TableIcon,
-  Search,
-  Database,
   ChevronRight,
-  HardDrive,
-  FileCode,
+  ChevronDown,
+  Search,
+  Filter,
+  Star,
+  X,
+  RefreshCw,
+  Plus,
+  Power,
+  KeyRound,
   Layers,
-  CheckCircle2,
-  Trash2,
-  Power
+  HardDrive,
+  Clock,
+  History,
+  Folder,
+  FolderOpen,
+  Check,
+  Table as LucideTable,
+  Eye,
+  Database
 } from 'lucide-react';
-import { TableInfo, ConnectionConfig } from '@shared/types/database';
+import { TableInfo, ConnectionConfig, ColumnInfo } from '@shared/types/database';
 import { DatabaseIcon } from '../icons/DatabaseIcon';
+import { safeApi } from '../../services/api-client';
 
 interface SidebarProps {
   activeConnection: ConnectionConfig | null;
@@ -23,7 +34,31 @@ interface SidebarProps {
   onSwitchConnection: (conn: ConnectionConfig) => void;
   onDisconnect: () => void;
   onOpenNewQuery: () => void;
+  onOpenNewConnection: () => void;
+  onRefreshSchema: () => void;
+  isLoading?: boolean;
 }
+
+// Beekeeper Studio golden table grid icon
+const TableGridIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg viewBox="0 0 16 16" className={`${className} text-amber-400 flex-shrink-0`} fill="currentColor">
+    <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    <line x1="1.5" y1="6" x2="14.5" y2="6" stroke="currentColor" strokeWidth="1.2" />
+    <line x1="1.5" y1="10" x2="14.5" y2="10" stroke="currentColor" strokeWidth="1.2" />
+    <line x1="5.5" y1="2" x2="5.5" y2="14" stroke="currentColor" strokeWidth="1.2" />
+    <line x1="10.5" y1="2" x2="10.5" y2="14" stroke="currentColor" strokeWidth="1.2" />
+  </svg>
+);
+
+// Beekeeper Studio cyan view grid icon
+const ViewGridIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg viewBox="0 0 16 16" className={`${className} text-sky-400 flex-shrink-0`} fill="none" stroke="currentColor">
+    <rect x="1.5" y="2" width="13" height="12" rx="1.5" strokeWidth="1.3" strokeDasharray="2 1.5" />
+    <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
+    <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
+    <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
+  </svg>
+);
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeConnection,
@@ -33,169 +68,508 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTable,
   onSwitchConnection,
   onDisconnect,
-  onOpenNewQuery
+  onOpenNewQuery,
+  onOpenNewConnection,
+  onRefreshSchema,
+  isLoading = false
 }) => {
-  const [tableSearch, setTableSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'tables' | 'connections'>('tables');
+  // Activity rail selection: 'explorer' | 'pinned' | 'history'
+  const [activeRail, setActiveRail] = useState<'explorer' | 'pinned' | 'history'>('explorer');
 
+  // Search filter
+  const [filterText, setFilterText] = useState('');
+
+  // Dropdown for connections
+  const [isConnDropdownOpen, setIsConnDropdownOpen] = useState(false);
+
+  // Pinned items persisted per connection
+  const [pinnedEntities, setPinnedEntities] = useState<string[]>([]);
+
+  // Expanded tables in tree (for columns)
+  const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
+
+  // Expanded schemas in tree
+  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set(['public', 'main', 'default']));
+
+  // Column metadata cache: tableName -> ColumnInfo[]
+  const [columnsCache, setColumnsCache] = useState<Record<string, ColumnInfo[]>>({});
+  const [loadingColumns, setLoadingColumns] = useState<Record<string, boolean>>({});
+
+  // Collapsed sections
+  const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
+  const [isEntitiesSectionOpen, setIsEntitiesSectionOpen] = useState(true);
+
+  // Load pinned entities from localStorage when connection changes
+  useEffect(() => {
+    if (!activeConnection) {
+      setPinnedEntities([]);
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(`daddata_pinned_${activeConnection.id}`);
+      if (saved) {
+        setPinnedEntities(JSON.parse(saved));
+      } else {
+        // Default pin first 2 tables if any
+        const defaults = tables.slice(0, 2).map(t => t.name);
+        setPinnedEntities(defaults);
+      }
+    } catch {
+      setPinnedEntities([]);
+    }
+  }, [activeConnection?.id, tables.length]);
+
+  const togglePin = (name: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const next = pinnedEntities.includes(name)
+      ? pinnedEntities.filter(p => p !== name)
+      : [...pinnedEntities, name];
+    setPinnedEntities(next);
+    if (activeConnection) {
+      localStorage.setItem(`daddata_pinned_${activeConnection.id}`, JSON.stringify(next));
+    }
+  };
+
+  const toggleExpandEntity = async (name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = new Set(expandedEntities);
+    const isExpanding = !next.has(name);
+
+    if (isExpanding) {
+      next.add(name);
+      // Fetch columns if not cached
+      if (!columnsCache[name] && activeConnection) {
+        setLoadingColumns(prev => ({ ...prev, [name]: true }));
+        try {
+          const cols = await safeApi.describeTable(activeConnection.id, name);
+          setColumnsCache(prev => ({ ...prev, [name]: cols }));
+        } catch (err) {
+          console.warn('Failed to load columns for table:', name, err);
+        } finally {
+          setLoadingColumns(prev => ({ ...prev, [name]: false }));
+        }
+      }
+    } else {
+      next.delete(name);
+    }
+    setExpandedEntities(next);
+  };
+
+  const toggleExpandSchema = (schemaName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = new Set(expandedSchemas);
+    if (next.has(schemaName)) {
+      next.delete(schemaName);
+    } else {
+      next.add(schemaName);
+    }
+    setExpandedSchemas(next);
+  };
+
+  // Filter entities
   const filteredTables = tables.filter(t =>
-    t.name.toLowerCase().includes(tableSearch.toLowerCase())
+    t.name.toLowerCase().includes(filterText.toLowerCase()) ||
+    (t.schema && t.schema.toLowerCase().includes(filterText.toLowerCase()))
   );
 
-  return (
-    <aside className="w-72 bg-white/95 backdrop-blur-md rounded-3xl p-4 flex flex-col shadow-nocra-card border border-black/[0.03] select-none">
-      {/* Switcher Navigation */}
-      <div className="flex bg-slate-100/80 p-1 rounded-2xl mb-3.5">
-        <button
-          onClick={() => setActiveTab('tables')}
-          className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-            activeTab === 'tables'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Tabelas ({tables.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('connections')}
-          className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-            activeTab === 'connections'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Conexões ({savedConnections.length})
-        </button>
-      </div>
+  // Group entities by schema
+  const schemasPresent = Array.from(new Set(filteredTables.map(t => t.schema || 'default')));
+  const hasMultipleSchemas = schemasPresent.length > 1;
 
-      {activeTab === 'tables' ? (
-        <div className="flex-1 flex flex-col min-h-0">
-          {/* Search Input */}
-          <div className="relative mb-3">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Filtrar tabelas..."
-              value={tableSearch}
-              onChange={e => setTableSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-xs rounded-xl border border-slate-200/70 focus:outline-none focus:ring-2 focus:ring-purple-400/30 transition-all text-slate-800"
-            />
+  // Separate tables vs views
+  const isView = (t: TableInfo) => t.type === 'view';
+  const pinnedList = tables.filter(t => pinnedEntities.includes(t.name));
+
+  const displayList = activeRail === 'pinned'
+    ? filteredTables.filter(t => pinnedEntities.includes(t.name))
+    : filteredTables;
+
+  const renderEntityItem = (entity: TableInfo, isPinnedItem = false) => {
+    const isSelected = selectedTable === entity.name;
+    const isExpanded = expandedEntities.has(entity.name);
+    const isItemPinned = pinnedEntities.includes(entity.name);
+    const columns = columnsCache[entity.name] || [];
+    const isLoadingCols = loadingColumns[entity.name];
+
+    return (
+      <div key={entity.name} className="flex flex-col">
+        <div
+          onClick={() => onSelectTable(entity.name)}
+          className={`h-7 px-2 flex items-center justify-between text-xs cursor-pointer group rounded-lg transition-colors select-none ${
+            isSelected
+              ? 'bg-[#272730] text-white font-medium'
+              : 'text-slate-300 hover:bg-[#202026] hover:text-white'
+          }`}
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            {/* Expand Chevron */}
+            <button
+              onClick={e => toggleExpandEntity(entity.name, e)}
+              className="p-0.5 -ml-1 text-slate-400 hover:text-slate-200 transition-transform"
+              title="Ver colunas"
+            >
+              <ChevronRight
+                className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90 text-slate-200' : ''}`}
+              />
+            </button>
+
+            {/* Icon: Table (golden) or View (cyan) */}
+            {isView(entity) ? <ViewGridIcon /> : <TableGridIcon />}
+
+            {/* Name */}
+            <span className="truncate text-[12px]">{entity.name}</span>
           </div>
 
-          {/* Quick Query Button */}
-          <button
-            onClick={onOpenNewQuery}
-            className="w-full mb-3 py-2 px-3 rounded-2xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 border border-purple-200/50 text-purple-700 text-xs font-semibold flex items-center justify-between transition-all"
-          >
-            <span className="flex items-center gap-2">
-              <FileCode className="w-4 h-4 text-purple-600" />
-              <span>Novo Editor SQL</span>
-            </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-purple-100/70 text-purple-800 font-mono">
-              Ctrl+N
-            </span>
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Row count pill if available */}
+            {entity.rowCount !== undefined && (
+              <span className="text-[10px] text-slate-500 font-mono hidden group-hover:inline-block">
+                {entity.rowCount}
+              </span>
+            )}
 
-          {/* Tables List */}
-          <div className="flex-1 overflow-y-auto pr-1 space-y-1">
-            {filteredTables.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 text-xs">
-                {tables.length === 0
-                  ? 'Nenhuma tabela encontrada. Conecte-se a um banco.'
-                  : 'Nenhuma tabela corresponde à busca.'}
-              </div>
+            {/* Pin / Unpin Button */}
+            {isPinnedItem ? (
+              <button
+                onClick={e => togglePin(entity.name, e)}
+                title="Desafixar tabela"
+                className="opacity-60 hover:opacity-100 p-0.5 text-amber-400 hover:text-rose-400"
+              >
+                <X className="w-3 h-3" />
+              </button>
             ) : (
-              filteredTables.map(t => {
-                const isSelected = selectedTable === t.name;
-                return (
-                  <button
-                    key={t.name}
-                    onClick={() => onSelectTable(t.name)}
-                    className={`w-full text-left px-3 py-2 rounded-2xl text-xs flex items-center justify-between group transition-all ${
-                      isSelected
-                        ? 'bg-[#121217] text-white shadow-sm font-medium'
-                        : 'text-slate-700 hover:bg-slate-100/80'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2.5 truncate">
-                      <TableIcon
-                        className={`w-3.5 h-3.5 flex-shrink-0 ${
-                          isSelected ? 'text-purple-300' : 'text-slate-400 group-hover:text-purple-600'
-                        }`}
-                      />
-                      <span className="truncate font-medium">{t.name}</span>
-                    </span>
-
-                    {t.rowCount !== undefined && (
-                      <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full flex-shrink-0 ${
-                          isSelected
-                            ? 'bg-white/20 text-white'
-                            : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
-                        }`}
-                      >
-                        {t.rowCount}
-                      </span>
-                    )}
-                  </button>
-                );
-              })
+              <button
+                onClick={e => togglePin(entity.name, e)}
+                title={isItemPinned ? 'Desafixar' : 'Fixar no topo'}
+                className={`p-0.5 transition-opacity ${
+                  isItemPinned
+                    ? 'text-amber-400 opacity-100'
+                    : 'text-slate-500 hover:text-amber-400 opacity-0 group-hover:opacity-100'
+                }`}
+              >
+                <Star
+                  className={`w-3 h-3 ${isItemPinned ? 'fill-amber-400' : ''}`}
+                />
+              </button>
             )}
           </div>
         </div>
-      ) : (
-        /* Connections Tab */
-        <div className="flex-1 overflow-y-auto pr-1 space-y-2">
-          {savedConnections.map(c => {
-            const isActive = activeConnection?.id === c.id;
-            return (
-              <div
-                key={c.id}
-                onClick={() => onSwitchConnection(c)}
-                className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all flex items-center gap-2.5 ${
-                  isActive
-                    ? 'border-purple-300 bg-purple-50/50 shadow-sm'
-                    : 'border-slate-200/70 hover:border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                <DatabaseIcon type={c.type} className="w-5 h-5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="font-semibold text-slate-800 truncate">{c.name}</span>
-                    <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-700">
-                      {c.type}
+
+        {/* Expanded Columns Tree */}
+        {isExpanded && (
+          <div className="pl-6 pr-1 py-1 space-y-0.5 border-l border-slate-700/50 ml-3.5 my-0.5">
+            {isLoadingCols ? (
+              <div className="text-[11px] text-slate-500 py-0.5 pl-2 animate-pulse">Carregando colunas...</div>
+            ) : columns.length === 0 ? (
+              <div className="text-[11px] text-slate-500 py-0.5 pl-2">Nenhuma coluna detalhada.</div>
+            ) : (
+              columns.map(col => (
+                <div
+                  key={col.name}
+                  className="flex items-center justify-between text-[11px] py-0.5 px-1.5 rounded hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    {col.isPrimaryKey ? (
+                      <KeyRound className="w-2.5 h-2.5 text-amber-400 flex-shrink-0" />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-600 flex-shrink-0" />
+                    )}
+                    <span className={`truncate ${col.isPrimaryKey ? 'text-amber-200 font-semibold' : ''}`}>
+                      {col.name}
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-500 truncate font-mono">
-                    {c.filePath || `${c.host}:${c.port || ''}`}
-                  </p>
+                  <span className="text-[10px] text-slate-500 font-mono ml-2 uppercase truncate flex-shrink-0">
+                    {col.type}
+                  </span>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Bottom Connection Status / Disconnect Pill */}
-      {activeConnection && (
-        <div className="pt-3 border-t border-slate-100 mt-2 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 truncate">
-            <DatabaseIcon type={activeConnection.type} className="w-5 h-5 flex-shrink-0" />
-            <div className="truncate">
-              <p className="text-[11px] font-bold text-slate-800 truncate">{activeConnection.name}</p>
-              <p className="text-[10px] text-slate-400 capitalize">{activeConnection.type} Driver</p>
-            </div>
+              ))
+            )}
           </div>
+        )}
+      </div>
+    );
+  };
 
+  return (
+    <aside className="w-80 bg-[#16161c] text-slate-300 rounded-3xl flex overflow-hidden shadow-nocra-card border border-white/5 select-none z-10">
+      {/* 1. Leftmost Activity Rail (Beekeeper Studio Style) */}
+      <div className="w-11 bg-[#101014] flex flex-col items-center py-3 border-r border-white/5 space-y-3.5 flex-shrink-0">
+        {/* Explorer icon */}
+        <button
+          onClick={() => setActiveRail('explorer')}
+          title="Tabelas e Entidades"
+          className={`p-2 rounded-xl transition-all relative ${
+            activeRail === 'explorer'
+              ? 'text-white bg-white/10 shadow-sm'
+              : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          {activeRail === 'explorer' && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-purple-500 rounded-r" />
+          )}
+        </button>
+
+        {/* Pinned / Favorites */}
+        <button
+          onClick={() => setActiveRail('pinned')}
+          title="Tabelas Fixadas / Favoritos"
+          className={`p-2 rounded-xl transition-all relative ${
+            activeRail === 'pinned'
+              ? 'text-amber-400 bg-white/10 shadow-sm'
+              : 'text-slate-500 hover:text-amber-300 hover:bg-white/5'
+          }`}
+        >
+          <Star className={`w-4 h-4 ${pinnedEntities.length > 0 ? 'fill-amber-400/20' : ''}`} />
+          {activeRail === 'pinned' && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-amber-400 rounded-r" />
+          )}
+        </button>
+
+        {/* History */}
+        <button
+          onClick={() => onOpenNewQuery()}
+          title="Novo Editor SQL (Ctrl+N)"
+          className="p-2 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+        >
+          <Clock className="w-4 h-4" />
+        </button>
+
+        <div className="flex-1" />
+
+        {/* Disconnect or settings at bottom */}
+        {activeConnection && (
           <button
             onClick={onDisconnect}
-            title="Desconectar Banco"
-            className="p-1.5 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+            title="Desconectar banco de dados"
+            className="p-2 rounded-xl text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
           >
             <Power className="w-4 h-4" />
           </button>
+        )}
+      </div>
+
+      {/* 2. Main Sidebar Explorer Area */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#16161c]">
+        {/* Header with Connection Dropdown (Beekeeper Signature) */}
+        <div className="p-3 border-b border-white/5 relative">
+          <div className="flex items-center justify-between gap-1.5">
+            <button
+              onClick={() => setIsConnDropdownOpen(!isConnDropdownOpen)}
+              className="flex-1 min-w-0 text-left px-2 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {activeConnection && (
+                  <DatabaseIcon type={activeConnection.type} className="w-4 h-4 flex-shrink-0" />
+                )}
+                <span className="text-xs font-bold text-white truncate">
+                  {activeConnection?.filePath
+                    ? activeConnection.filePath.split(/[\\/]/).pop()
+                    : activeConnection?.name || 'Selecione Conexão'}
+                </span>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 ml-1" />
+            </button>
+
+            {/* Refresh Schema Button */}
+            <button
+              onClick={onRefreshSchema}
+              disabled={isLoading || !activeConnection}
+              title="Recarregar Esquema"
+              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
+            </button>
+          </div>
+
+          {/* Connection Switcher Dropdown */}
+          {isConnDropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setIsConnDropdownOpen(false)} />
+              <div className="absolute left-3 right-3 top-full mt-1 bg-[#1e1e26] border border-white/10 rounded-2xl p-2 shadow-2xl z-40 space-y-1">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                  Conexões Salvas
+                </div>
+
+                {savedConnections.map(c => {
+                  const isActive = activeConnection?.id === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        setIsConnDropdownOpen(false);
+                        onSwitchConnection(c);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                        isActive
+                          ? 'bg-purple-600/30 text-purple-200 border border-purple-500/30 font-semibold'
+                          : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <DatabaseIcon type={c.type} className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="truncate">{c.name}</span>
+                      </div>
+                      <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-white/10 text-slate-400 font-mono">
+                        {c.type}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                <div className="pt-1.5 border-t border-white/5 mt-1">
+                  <button
+                    onClick={() => {
+                      setIsConnDropdownOpen(false);
+                      onOpenNewConnection();
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold text-purple-300 hover:bg-purple-500/10 flex items-center gap-2 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Nova Conexão...</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Filter Bar (Beekeeper Input) */}
+          <div className="relative mt-2.5">
+            <input
+              type="text"
+              placeholder="Filter"
+              value={filterText}
+              onChange={e => setFilterText(e.target.value)}
+              className="w-full bg-[#1e1e26] text-slate-200 placeholder-slate-500 text-xs px-2.5 py-1.5 pr-7 rounded-xl border border-white/5 focus:outline-none focus:border-purple-500/50 transition-colors"
+            />
+            {filterText ? (
+              <button
+                onClick={() => setFilterText('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <Filter className="w-3 h-3 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            )}
+          </div>
         </div>
-      )}
+
+        {/* Tree Content: PINNED & ENTITIES */}
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3">
+          {/* PINNED Section (Beekeeper Signature) */}
+          {pinnedList.length > 0 && activeRail !== 'pinned' && (
+            <div>
+              <div
+                onClick={() => setIsPinnedSectionOpen(!isPinnedSectionOpen)}
+                className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-200 select-none"
+              >
+                <div className="flex items-center gap-1.5">
+                  <ChevronRight
+                    className={`w-3 h-3 transition-transform ${isPinnedSectionOpen ? 'rotate-90' : ''}`}
+                  />
+                  <span>PINNED</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-slate-300 font-mono font-normal">
+                    {pinnedList.length}
+                  </span>
+                </div>
+              </div>
+
+              {isPinnedSectionOpen && (
+                <div className="mt-1 space-y-0.5">
+                  {pinnedList.map(entity => renderEntityItem(entity, true))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ENTITIES Section (Tables, Schemas, Views) */}
+          <div>
+            <div
+              onClick={() => setIsEntitiesSectionOpen(!isEntitiesSectionOpen)}
+              className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-200 select-none"
+            >
+              <div className="flex items-center gap-1.5">
+                <ChevronRight
+                  className={`w-3 h-3 transition-transform ${isEntitiesSectionOpen ? 'rotate-90' : ''}`}
+                />
+                <span>ENTITIES</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-slate-300 font-mono font-normal">
+                  {displayList.length}
+                </span>
+              </div>
+            </div>
+
+            {isEntitiesSectionOpen && (
+              <div className="mt-1 space-y-0.5">
+                {displayList.length === 0 ? (
+                  <div className="text-center py-6 text-slate-500 text-xs">
+                    {tables.length === 0
+                      ? 'Nenhuma tabela ou conexão ativa.'
+                      : 'Nenhuma entidade encontrada no filtro.'}
+                  </div>
+                ) : hasMultipleSchemas ? (
+                  /* Grouped by Schemas */
+                  schemasPresent.map(schema => {
+                    const schemaEntities = displayList.filter(t => (t.schema || 'default') === schema);
+                    if (schemaEntities.length === 0) return null;
+                    const isExpandedSchema = expandedSchemas.has(schema);
+
+                    return (
+                      <div key={schema} className="mb-2">
+                        {/* Schema Header */}
+                        <div
+                          onClick={e => toggleExpandSchema(schema, e)}
+                          className="h-6 px-2 flex items-center justify-between text-xs text-slate-400 hover:text-white cursor-pointer select-none rounded hover:bg-white/5"
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            <ChevronRight
+                              className={`w-3 h-3 transition-transform ${isExpandedSchema ? 'rotate-90' : ''}`}
+                            />
+                            {isExpandedSchema ? (
+                              <FolderOpen className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                            ) : (
+                              <Folder className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                            )}
+                            <span className="font-semibold truncate text-[11px]">{schema}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-mono">{schemaEntities.length}</span>
+                        </div>
+
+                        {/* Schema Children */}
+                        {isExpandedSchema && (
+                          <div className="pl-3 space-y-0.5 mt-0.5">
+                            {schemaEntities.map(entity => renderEntityItem(entity))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  /* Flat Entities List (Single schema / SQLite / DBF / Paradox) */
+                  displayList.map(entity => renderEntityItem(entity))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Footer Action: New SQL Query Editor */}
+        <div className="p-2.5 border-t border-white/5">
+          <button
+            onClick={onOpenNewQuery}
+            className="w-full py-1.5 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs font-semibold flex items-center justify-between transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <span className="text-purple-400 font-mono">&lt;&gt;</span>
+              <span>Novo Editor SQL</span>
+            </span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-200 font-mono">
+              Ctrl+N
+            </span>
+          </button>
+        </div>
+      </div>
     </aside>
   );
 };

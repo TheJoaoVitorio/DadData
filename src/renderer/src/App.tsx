@@ -6,6 +6,7 @@ import { DataGrid } from './components/grid/DataGrid';
 import { ConnectionDrawer } from './components/connections/ConnectionDrawer';
 import { AddRowDrawer } from './components/grid/AddRowDrawer';
 import { FloatingPromptBar } from './components/layout/FloatingPromptBar';
+import { StatusBar } from './components/layout/StatusBar';
 
 import {
   ConnectionConfig,
@@ -14,14 +15,15 @@ import {
   ColumnInfo,
   ExportOptions
 } from '@shared/types/database';
-import { Terminal, Table as TableIcon, X, CheckCircle2, AlertCircle, Monitor } from 'lucide-react';
+import { Terminal, Table as TableIcon, X, CheckCircle2, AlertCircle, Monitor, Plus } from 'lucide-react';
 import { safeApi, isDesktopElectron } from './services/api-client';
 
 interface TabItem {
   id: string;
   title: string;
-  type: 'query' | 'table';
+  type: 'query' | 'table' | 'view';
   tableName?: string;
+  schema?: string;
 }
 
 export const App: React.FC = () => {
@@ -140,10 +142,17 @@ export const App: React.FC = () => {
     setIsLoading(true);
     setSelectedTable(tableName);
 
+    // Identify if table or view
+    const entity = tables.find(t => t.name === tableName);
+    const tabType: 'table' | 'view' = entity?.type === 'view' ? 'view' : 'table';
+
     // Add or activate table tab
-    const tabId = `table_${tableName}`;
+    const tabId = `${tabType}_${tableName}`;
     if (!tabs.some(t => t.id === tabId)) {
-      setTabs(prev => [...prev, { id: tabId, title: tableName, type: 'table', tableName }]);
+      setTabs(prev => [
+        ...prev,
+        { id: tabId, title: tableName, type: tabType, tableName, schema: entity?.schema }
+      ]);
     }
     setActiveTabId(tabId);
 
@@ -155,7 +164,7 @@ export const App: React.FC = () => {
       setColumnsMeta(meta);
       setQueryResult(data);
     } catch (err: any) {
-      showToast(`Erro ao abrir tabela: ${err.message}`, 'error');
+      showToast(`Erro ao abrir ${tabType === 'view' ? 'view' : 'tabela'}: ${err.message}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -244,7 +253,9 @@ export const App: React.FC = () => {
 
   const handleOpenNewQuery = () => {
     const newId = `query_${Date.now()}`;
-    setTabs(prev => [...prev, { id: newId, title: `Consulta ${tabs.length + 1}`, type: 'query' }]);
+    const queryCount = tabs.filter(t => t.type === 'query').length;
+    const title = queryCount === 0 ? 'query_1' : `query_${queryCount + 1}`;
+    setTabs(prev => [...prev, { id: newId, title, type: 'query' }]);
     setActiveTabId(newId);
   };
 
@@ -315,34 +326,59 @@ export const App: React.FC = () => {
           onSwitchConnection={handleConnect}
           onDisconnect={handleDisconnect}
           onOpenNewQuery={handleOpenNewQuery}
+          onOpenNewConnection={() => setIsConnectionDrawerOpen(true)}
+          onRefreshSchema={handleRefreshSchema}
+          isLoading={isLoading}
         />
 
         {/* Central Workspace Card */}
         <main className="flex-1 bg-white/95 backdrop-blur-md rounded-3xl p-5 shadow-nocra-card border border-black/[0.03] flex flex-col min-h-0 overflow-hidden">
-          {/* Tabs Bar */}
-          <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-100 flex-shrink-0 select-none overflow-x-auto">
+          {/* Beekeeper Studio Style Tabs Bar */}
+          <div className="flex items-center gap-1.5 pb-2.5 mb-3 border-b border-slate-100 flex-shrink-0 select-none overflow-x-auto">
             {tabs.map(tab => {
               const isActive = tab.id === activeTabId;
               return (
                 <div
                   key={tab.id}
-                  onClick={() => setActiveTabId(tab.id)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all ${
+                  onClick={() => {
+                    setActiveTabId(tab.id);
+                    if (tab.tableName) setSelectedTable(tab.tableName);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all ${
                     isActive
-                      ? 'bg-[#121217] text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                      ? 'bg-[#181820] text-white shadow-sm'
+                      : 'bg-slate-100 hover:bg-slate-200/80 text-slate-600'
                   }`}
                 >
                   {tab.type === 'query' ? (
-                    <Terminal className="w-3.5 h-3.5 text-purple-400" />
+                    <span className="font-mono text-[11px] font-bold text-pink-400">&lt;&gt;</span>
+                  ) : tab.type === 'view' ? (
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor">
+                      <rect x="1.5" y="2" width="13" height="12" rx="1.5" strokeWidth="1.3" strokeDasharray="2 1.5" />
+                      <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
+                      <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
+                      <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
+                    </svg>
                   ) : (
-                    <TableIcon className="w-3.5 h-3.5 text-sky-400" />
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="currentColor">
+                      <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+                      <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
+                      <line x1="1.5" y1="10" x2="14.5" y2="10" strokeWidth="1.2" />
+                      <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
+                      <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
+                    </svg>
                   )}
+
                   <span>{tab.title}</span>
+
+                  {tab.type !== 'query' && (
+                    <span className="text-[10px] text-slate-400 font-mono font-normal">[all]</span>
+                  )}
+
                   {tabs.length > 1 && (
                     <button
                       onClick={e => handleCloseTab(tab.id, e)}
-                      className="hover:opacity-75 p-0.5 rounded-full"
+                      className="hover:opacity-75 p-0.5 rounded-full text-slate-400 hover:text-white"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -351,12 +387,13 @@ export const App: React.FC = () => {
               );
             })}
 
+            {/* New Tab Button */}
             <button
               onClick={handleOpenNewQuery}
-              className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
-              title="Nova Aba de Consulta"
+              className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+              title="Nova Consulta SQL (Ctrl+N)"
             >
-              <Terminal className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
             </button>
           </div>
 
@@ -398,6 +435,16 @@ export const App: React.FC = () => {
         onExportCsv={() => handleExport('csv')}
         onExportExcel={() => handleExport('xlsx')}
         isLoading={isLoading}
+      />
+
+      {/* Beekeeper Style Status Bar */}
+      <StatusBar
+        activeConnection={activeConnection}
+        queryResult={queryResult}
+        isLoading={isLoading}
+        selectedTable={selectedTable}
+        onExportCsv={() => handleExport('csv')}
+        onExportExcel={() => handleExport('xlsx')}
       />
 
       {/* Drawers (replacing modals) */}
