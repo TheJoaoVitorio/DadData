@@ -1,85 +1,123 @@
-# DadData 🗄️⚡
-> **Universal Modern & Legacy Database Client** — Inspirado no Beekeeper Studio, projetado com o design system minimalista **Nocra UI Kit** e arquitetado em Electron, React e TypeScript.
+# DadData
+
+Cliente desktop universal para bancos de dados modernos e legados. Desenvolvido em **Electron**, **React**, **TypeScript** e **Tailwind CSS**, com foco em interoperabilidade, performance e uma interface orientada a desenvolvedores baseada no design system do **AbacatePay**.
 
 ---
 
-## 👥 Agentes Especialistas do Projeto (Guild)
+## Visão Geral
 
-O projeto conta com agentes dedicados e documentados em `AGENTS.md` e `.agents/skills/`:
-
-| Agente | Especialidade | Papel no Projeto |
-| :--- | :--- | :--- |
-| 🏛️ **software-architect** | Arquitetura de Software | Padrões de pastas, Clean Architecture, isolamento Preload e interface unificada de drivers. |
-| 🗄️ **database-specialist** | Bancos de Dados Modernos & Legados | Motores de banco, parsing de arquivos (.DBF, .DB, .FIC, .MDB, .NX1), introspecção e CRUD. |
-| ⚙️ **backend-specialist** | Electron Main & IPC | Gerenciamento de pooling, IPC seguro tipado e motor de exportação streaming (CSV e Excel .xlsx). |
-| 🎨 **frontend-specialist** | React, Tailwind & UI/UX | Replicar o design system minimalista Nocra UI Kit (cards ultra-arredondados, aura pastel, editor dark). |
-| 🧪 **test-engineer** | Engenharia de Testes (QA) | Suíte automatizada Vitest validando drivers, parsing, CRUD e exportação contínua. |
-| 📦 **git-commit-manager** | Versionamento e Commits | Histórico semântico e atômico (Conventional Commits) a cada funcionalidade aprovada. |
+O **DadData** foi projetado para atender tanto sistemas contemporâneos quanto ecossistemas empresariais legados (ERPs em Delphi, FoxPro, WinDev, Clipper e VB6), permitindo conectar, inspecionar schemas, consultar, manipular dados (CRUD) e exportar relatórios sem necessidade de middlewares complexos.
 
 ---
 
-## 🚀 Bancos de Dados Suportados
+## Motores de Banco de Dados Suportados
 
-### 💾 Bancos Legados de Arquivo / ERP:
-- **dBase / FoxPro / Clipper (`.DBF`)**: Leitura e escrita nativa com suporte a tabelas isoladas ou diretórios inteiros de DBFs.
-- **Paradox (`.DB`)**: Suporte a versões Borland/Corel 3.5 a 7.0 para sistemas Delphi legados.
-- **Microsoft Access (`.MDB` / `.ACCDB`)**: Tabelas e consultas via motor Jet/ACE.
-- **HFSQL / HyperFileSQL (`.FIC`)**: Formato clássico PC SOFT WinDev / WebDev.
-- **NexusDB (`.NX1`)**: Tabelas de banco de dados Delphi.
-- **Firebird (`.FDB`)**: Dialetos 1 e 3.
+### Legados & Baseados em Arquivo (Desktop / ERP)
+- **Firebird (.FDB)**: Suporte a Dialetos 1 e 3 (v1.5 a v5.0) via socket nativo TCP/IP com resolução de caminhos Windows 8.3.
+- **dBase / FoxPro / Clipper (.DBF)**: Leitura de arquivos `.DBF` individuais e diretórios com múltiplas tabelas.
+- **Borland / Corel Paradox (.DB)**: Decodificação de arquivos Paradox v3.5 a v7.0, incluindo suporte a campos de auto-incremento e blocos múltiplos.
+- **Microsoft Access (.MDB / .ACCDB)**: Conexão via engine Jet / ACE com introspecção de tabelas e dados.
+- **PC SOFT HFSQL / HyperFileSQL (.FIC)**: Leitura de tabelas clássicas de aplicações WinDev / WebDev.
+- **NexusDB (.NX1)**: Suporte a tabelas do motor Delphi NexusDB v4.
 
-### ⚡ Bancos Modernos & Cloud:
-- **SQLite 3**: Arquivo local ou memória, ultrarrápido com WebAssembly.
-- **PostgreSQL**: Múltiplas versões (v9.x a v17.x) e múltiplos schemas.
-- **MySQL & MariaDB**: Múltiplas versões (5.5 a 8.4).
-- **Microsoft SQL Server**: T-SQL com suporte a instâncias nomeadas.
-- **MongoDB**: Coleções NoSQL e documentos BSON/JSON.
-
----
-
-## ✨ Funcionalidades Principais
-
-1. **Conexão Universal**:
-   - Conecte-se tanto a servidores de banco de dados remotos quanto a arquivos locais legados (.dbf, .db, .fic, .mdb, .sqlite, .nx1, .fdb) com diálogo nativo de busca de arquivos e pastas no Windows/Desktop.
-2. **Editor SQL / NoSQL**:
-   - Card escuro no estilo Nocra UI com atalhos de sintaxe (`SELECT *`, `WHERE`, `ORDER BY`, `COUNT(*)`).
-   - Execução rápida com atalho `Ctrl+Enter`.
-   - Medição precisa de latência de execução em milissegundos.
-3. **Data Grid Interativo & Manipulação (CRUD)**:
-   - Visualização com tipagem de colunas e detecção automática de Chave Primária (PK).
-   - **Edição Inline**: Duplo clique em qualquer célula para alterar o valor instantaneamente.
-   - **Inserção de Registros**: Modal dinâmico "Adicionar Linha" adaptado às colunas da tabela.
-   - **Exclusão de Registros**: Botão de lixeira por linha com diálogo de confirmação.
-   - Ordenação ascendente/descendente por coluna e busca em tempo real.
-   - Paginação fluida.
-4. **Exportação de Dados**:
-   - **CSV**: Com cabeçalhos, separador configurável e codificação UTF-8 com BOM para abertura perfeita no Microsoft Excel.
-   - **Excel (.xlsx)**: Criação de planilhas nativas formatadas com cabeçalhos estilizados, larguras automáticas de coluna e tipos numéricos/datas.
-5. **Design System Nocra UI Kit**:
-   - Auras difusas em degradê pastel iridescente no background.
-   - Superfícies flutuantes com cantos arredondados generosos (`rounded-2xl` e `rounded-3xl`).
-   - Floating Action / Query Bar com anel iridescente e botão `✨ Executar`.
+### Modernos, Cloud & NoSQL
+- **PostgreSQL**: v9.x a v17.x, com navegação estruturada por schemas (`public`, schemas customizados, views).
+- **MySQL & MariaDB**: v5.5 a v8.4.
+- **Microsoft SQL Server**: T-SQL, catalogação de schemas e compatibilidade com instâncias nomeadas.
+- **SQLite 3**: Arquivos locais em disco ou bancos em memória.
+- **MongoDB**: Coleções NoSQL com documentos BSON/JSON.
 
 ---
 
-## 🛠️ Como Executar o Projeto
+## Recursos da Aplicação
 
-### Instalação de Dependências
+- **Explorador de Esquemas (Sidebar)**:
+  - Navegação em árvore de tabelas, views, schemas e metadados de colunas (tipagem e chaves primárias).
+  - Filtro em tempo real para bases com centenas de entidades.
+  - Pinning/favoritos para acesso rápido às tabelas de uso frequente.
+- **Editor SQL / NoSQL**:
+  - Syntax highlighting para queries, atalhos de snippets (`SELECT *`, `WHERE`, `ORDER BY`, `COUNT`).
+  - Execução via `Ctrl+Enter` com telemetria de latência em milissegundos.
+- **Data Grid Interativo & CRUD**:
+  - **Edição Inline**: Duplo clique em qualquer célula para alteração rápida com validação de tipos.
+  - **Inserção de Registros**: Gaveta lateral dinâmica adaptada ao schema da tabela selecionada.
+  - **Exclusão Segura**: Confirmação visual para remoção de registros por chave primária.
+  - Paginação, ordenação multi-coluna e busca textual inline.
+- **Motor de Exportação**:
+  - **CSV**: UTF-8 com suporte a BOM para compatibilidade com Microsoft Excel.
+  - **Excel (.xlsx)**: Geração de planilhas nativas formatadas via streaming, preservando tipos de dados.
+- **Design System AbacatePay**:
+  - Paleta em tons escuros de petróleo (`#0C1818`, `#112323`), acentos em verde abacate neon (`#00F566`) e superfícies contrastadas.
+  - Tipografia técnica com **Fustat** e **JetBrains Mono**.
+  - Livre de elementos gráficos superficiais e focado na ergonomia do desenvolvedor.
+
+---
+
+## Arquitetura do Projeto
+
+O código segue a separação estrita de camadas do Electron (Clean Architecture / Hexagonal):
+
+```
+DadData/
+├── src/
+│   ├── main/                 # Processo Principal do Electron
+│   │   ├── index.ts          # Ciclo de vida da janela e flags de segurança
+│   │   ├── ipc/              # Contratos tipados de IPC entre Main e Renderer
+│   │   └── export/           # Serviços de exportação de dados (CSV e Excel)
+│   ├── preload/              # Context Isolation bridge (window.api)
+│   ├── drivers/              # Adaptadores de banco de dados (DatabaseDriver)
+│   │   ├── firebird/         # Driver nativo Firebird (node-firebird)
+│   │   ├── paradox/          # Parser binário Borland Paradox
+│   │   ├── dbf/              # Parser binário dBase/FoxPro
+│   │   ├── sqlite/           # Driver SQLite via WebAssembly/sql.js
+│   │   └── ...               # Postgres, MySQL, MSSQL, Mongo, HFSQL, NexusDB
+│   ├── renderer/             # Interface React (Vite)
+│   │   └── src/
+│   │       ├── components/   # UI: DataGrid, SqlEditor, Sidebar, Header, Drawers
+│   │       ├── services/     # Cliente seguro de IPC
+│   │       └── index.css     # Tokens do design system AbacatePay
+│   └── shared/               # Tipos TypeScript e contratos de IPC compartilhados
+└── tests/                    # Suíte de testes automatizados com Vitest
+```
+
+---
+
+## Primeiros Passos
+
+### Pré-requisitos
+- **Node.js**: v18+ (recomendado v20+)
+- **npm** ou **pnpm**
+- **Git**
+
+### Instalação
 ```bash
+git clone https://github.com/TheJoaoVitorio/DadData.git
+cd DadData
 npm install
 ```
 
-### Rodar a Suíte de Testes Automatizada (Vitest)
-```bash
-npm run test
-```
-
-### Modo de Desenvolvimento (Electron + Vite HMR)
+### Desenvolvimento
+Inicie o Electron com recarregamento em tempo real (HMR):
 ```bash
 npm run dev
 ```
 
-### Compilar e Empacotar para Produção
+### Testes Automatizados
+Validação dos drivers de banco de dados, parsing e integridade:
+```bash
+npm test
+```
+
+### Build de Produção
+Gera os executáveis do Electron e os bundles otimizados:
 ```bash
 npm run build
 ```
+
+---
+
+## Licença
+
+Distribuído sob a licença **MIT**. Consulte `LICENSE` para mais informações.
+
+Desenvolvido por **[João Vitório](https://github.com/TheJoaoVitorio)**.
