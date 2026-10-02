@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Fustat', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['__fustat_6a44ab', '__fustat_Fallback_6a44ab', 'Fustat', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
