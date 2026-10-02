@@ -8,6 +8,14 @@ const __dirname = path.dirname(__filename);
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
+process.on('uncaughtException', (err) => {
+  console.error('[DadData Main uncaughtException]:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[DadData Main unhandledRejection]:', reason);
+});
+
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
