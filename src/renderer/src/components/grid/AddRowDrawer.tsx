@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, Plus, Layers } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { ColumnInfo } from '@shared/types/database';
 
 interface AddRowDrawerProps {
@@ -50,22 +50,22 @@ export const AddRowDrawer: React.FC<AddRowDrawerProps> = ({
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity"
       />
 
       {/* Drawer */}
-      <aside className="fixed inset-y-0 right-0 z-50 w-[480px] max-w-full bg-white shadow-2xl flex flex-col border-l border-slate-200/80 animate-in slide-in-from-right duration-300">
+      <aside className="fixed inset-y-0 right-0 z-50 w-[480px] max-w-full bg-white shadow-2xl flex flex-col border-l border-[#E2E8E5] animate-in slide-in-from-right duration-300">
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-5 border-b border-[#E2E8E5] flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-slate-900">Novo Registro</h3>
-            <p className="text-xs text-slate-500">
-              Inserindo na tabela: <span className="font-semibold text-purple-700">{tableName}</span>
+            <h3 className="text-base font-bold text-[#0C1818]">Novo Registro</h3>
+            <p className="text-xs text-[#64837E]">
+              Inserindo na tabela: <span className="font-bold text-[#047857]">{tableName}</span>
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+            className="p-2 rounded-full hover:bg-[#F2F6F4] text-[#64837E] hover:text-[#0C1818] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -79,20 +79,20 @@ export const AddRowDrawer: React.FC<AddRowDrawerProps> = ({
 
             return (
               <div key={col}>
-                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                <label className="block text-xs font-bold text-[#142929] mb-1 flex items-center justify-between">
                   <span>{col}</span>
                   {isPk && (
-                    <span className="text-[10px] text-purple-600 font-mono bg-purple-50 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] text-[#047857] font-mono font-bold bg-[#00F566]/20 border border-[#00F566]/30 px-1.5 py-0.5 rounded">
                       Chave Primária
                     </span>
                   )}
                 </label>
                 <input
                   type="text"
-                  placeholder={isPk ? '(Auto ou digite ID)' : `Informe ${col}`}
+                  placeholder={isPk ? '(Auto incremento ou digite ID)' : `Informe ${col}`}
                   value={formData[col] || ''}
                   onChange={e => handleFieldChange(col, e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 focus:outline-none transition-all"
+                  className="w-full px-3.5 py-2.5 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none transition-all"
                 />
               </div>
             );
@@ -100,20 +100,20 @@ export const AddRowDrawer: React.FC<AddRowDrawerProps> = ({
         </form>
 
         {/* Footer Actions */}
-        <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-2.5 bg-slate-50/50">
+        <div className="p-5 border-t border-[#E2E8E5] flex items-center justify-end gap-2.5 bg-[#F8FAF9]">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-full border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="px-4 py-2 rounded-full border border-[#D3DDD8] text-xs font-semibold text-[#64837E] hover:bg-[#E2E8E5] transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="px-6 py-2.5 rounded-full bg-[#121217] hover:bg-black text-white text-xs font-semibold flex items-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-50"
+            className="px-6 py-2.5 rounded-full bg-[#00F566] hover:bg-[#00DF61] text-[#0C1818] text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50"
           >
-            <Check className="w-3.5 h-3.5" />
+            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>{isSubmitting ? 'Salvando...' : 'Salvar Registro'}</span>
           </button>
         </div>
@@ -121,3 +121,4 @@ export const AddRowDrawer: React.FC<AddRowDrawerProps> = ({
     </>
   );
 };
+export default AddRowDrawer;

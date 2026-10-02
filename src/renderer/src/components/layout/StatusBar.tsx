@@ -1,15 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   FileSpreadsheet,
   Download,
   Clock,
   CheckCircle2,
-  AlertCircle,
-  Database,
   ChevronDown
 } from 'lucide-react';
 import { ConnectionConfig, QueryResult } from '@shared/types/database';
-import { DatabaseIcon } from '../icons/DatabaseIcon';
 
 interface StatusBarProps {
   activeConnection: ConnectionConfig | null;
@@ -28,62 +25,56 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   onExportCsv,
   onExportExcel
 }) => {
-  const [isExportOpen, setIsExportOpen] = React.useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const rowCount = queryResult?.rowCount ?? 0;
   const executionTimeMs = queryResult?.executionTimeMs ?? 0;
   const latencySec = (executionTimeMs / 1000).toFixed(3);
 
   if (!activeConnection) {
     return (
-      <footer className="h-8 bg-slate-100 border-t border-slate-200/80 px-4 flex items-center justify-between text-[11px] text-slate-500 select-none">
+      <footer className="h-8 bg-[#0C1818] border-t border-[#1E3B3A] px-4 flex items-center justify-between text-[11px] text-[#64837E] select-none">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-slate-300" />
+          <span className="w-2 h-2 rounded-full bg-[#1E3B3A]" />
           <span>Nenhum banco de dados conectado</span>
         </div>
-        <span>Pronto</span>
+        <span className="font-mono text-[10px] text-[#64837E]">DadData Client Pronto</span>
       </footer>
     );
   }
 
   return (
-    <footer className="h-8 bg-[#38BDF8] text-slate-900 px-4 flex items-center justify-between text-[11px] font-medium select-none shadow-sm z-30">
+    <footer className="h-8 bg-[#0C1818] text-slate-200 border-t border-[#1E3B3A] px-4 flex items-center justify-between text-[11px] font-medium select-none z-30">
       {/* Left: Active Connection Pill */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 font-bold">
-          <CheckCircle2 className="w-3.5 h-3.5 text-slate-900" />
+      <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 font-bold text-white">
+          <span className="w-2 h-2 rounded-full bg-[#00F566] animate-pulse" />
           <span>{activeConnection.name}</span>
         </div>
-        <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-white/40 text-slate-950 font-mono">
+        <span className="text-[10px] uppercase font-bold px-2 py-0.2 rounded-full bg-[#183434] text-[#00F566] font-mono border border-[#1E3B3A]">
           {activeConnection.type}
         </span>
+        {selectedTable && (
+          <span className="text-[10px] text-[#8EA8A3] font-mono border-l border-[#1E3B3A] pl-2">
+            tabela: <strong className="text-white">{selectedTable}</strong>
+          </span>
+        )}
       </div>
 
-      {/* Center: Result Metrics (Beekeeper Studio Signature) */}
+      {/* Center: Result Metrics */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-white/30 text-slate-950 font-semibold cursor-pointer hover:bg-white/40">
-          <span>Result 1</span>
-          <ChevronDown className="w-3 h-3 opacity-70" />
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#162E2E] text-slate-300 font-semibold border border-[#1E3B3A]">
+          <span className="text-[#00F566] font-mono font-bold">●</span>
+          <span>Resultado</span>
         </div>
 
-        <div className="flex items-center gap-1">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-slate-900" fill="currentColor">
-            <rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
-            <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" strokeWidth="1.2" />
-            <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" strokeWidth="1.2" />
-            <line x1="6" y1="2" x2="6" y2="14" stroke="currentColor" strokeWidth="1.2" />
-            <line x1="10" y1="2" x2="10" y2="14" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
-          <span className="font-semibold">{rowCount}</span>
+        <div className="flex items-center gap-1 font-mono text-[11px] text-slate-300">
+          <span className="text-[#64837E]">linhas:</span>
+          <span className="font-bold text-[#00F566]">{rowCount}</span>
         </div>
 
-        <div className="flex items-center gap-1">
-          <span className="text-slate-800 text-[12px] font-bold">⊘</span>
-          <span>0</span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <Clock className="w-3 h-3 text-slate-900" />
-          <span>{latencySec} seconds</span>
+        <div className="flex items-center gap-1 font-mono text-[11px] text-slate-300">
+          <Clock className="w-3 h-3 text-[#00F566]" />
+          <span>{latencySec}s</span>
         </div>
       </div>
 
@@ -91,35 +82,36 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       <div className="relative">
         <button
           onClick={() => setIsExportOpen(!isExportOpen)}
-          className="flex items-center gap-1.5 px-3 py-1 rounded bg-slate-900 hover:bg-black text-white text-[11px] font-semibold transition-all shadow-sm active:scale-95"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#183434] hover:bg-[#1E3B3A] border border-[#1E3B3A] text-slate-200 hover:text-white text-[11px] font-semibold transition-all shadow-sm active:scale-95"
         >
-          <Download className="w-3 h-3" />
-          <span>Download</span>
-          <ChevronDown className="w-3 h-3 opacity-80" />
+          <Download className="w-3 h-3 text-[#00F566]" />
+          <span>Exportar</span>
+          <ChevronDown className="w-3 h-3 text-[#64837E]" />
         </button>
 
         {isExportOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsExportOpen(false)} />
-            <div className="absolute right-0 bottom-full mb-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-50 text-xs">
+            <div className="fixed inset-0 z-30" onClick={() => setIsExportOpen(false)} />
+            <div className="absolute right-0 bottom-full mb-1 w-44 bg-[#162E2E] border border-[#1E3B3A] rounded-xl p-1.5 shadow-2xl z-40 space-y-1">
               <button
                 onClick={() => {
                   setIsExportOpen(false);
                   onExportCsv();
                 }}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-100 flex items-center gap-2 text-slate-700"
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 text-slate-300 hover:bg-[#1E3B3A] hover:text-[#00F566] transition-colors"
               >
-                <Download className="w-3.5 h-3.5 text-sky-600" />
+                <Download className="w-3.5 h-3.5 text-[#00F566]" />
                 <span>Exportar CSV</span>
               </button>
+
               <button
                 onClick={() => {
                   setIsExportOpen(false);
                   onExportExcel();
                 }}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-100 flex items-center gap-2 text-slate-700"
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 text-slate-300 hover:bg-[#1E3B3A] hover:text-[#00F566] transition-colors"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-[#00F566]" />
                 <span>Exportar Excel (.xlsx)</span>
               </button>
             </div>
@@ -129,3 +121,4 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     </footer>
   );
 };
+export default StatusBar;

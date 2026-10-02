@@ -272,20 +272,20 @@ export const App: React.FC = () => {
   const currentTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden text-slate-800">
+    <div className="flex flex-col h-screen overflow-hidden text-[#0C1818]">
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed top-4 right-6 z-50 px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-semibold border backdrop-blur-md transition-all ${
+          className={`fixed top-4 right-6 z-50 px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border backdrop-blur-md transition-all ${
             toast.type === 'success'
-              ? 'bg-emerald-50/95 text-emerald-800 border-emerald-200'
-              : 'bg-rose-50/95 text-rose-800 border-rose-200'
+              ? 'bg-[#0C1818] text-[#00F566] border-[#00F566]/40 shadow-abacate-glow'
+              : 'bg-[#2A0E12] text-rose-300 border-rose-500/40'
           }`}
         >
           {toast.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <CheckCircle2 className="w-4 h-4 text-[#00F566]" />
           ) : (
-            <AlertCircle className="w-4 h-4 text-rose-600" />
+            <AlertCircle className="w-4 h-4 text-rose-400" />
           )}
           <span>{toast.message}</span>
         </div>
@@ -332,9 +332,9 @@ export const App: React.FC = () => {
         />
 
         {/* Central Workspace Card */}
-        <main className="flex-1 bg-white/95 backdrop-blur-md rounded-3xl p-5 shadow-nocra-card border border-black/[0.03] flex flex-col min-h-0 overflow-hidden">
-          {/* Beekeeper Studio Style Tabs Bar */}
-          <div className="flex items-center gap-1.5 pb-2.5 mb-3 border-b border-slate-100 flex-shrink-0 select-none overflow-x-auto">
+        <main className="flex-1 bg-white rounded-3xl p-5 shadow-abacate-card border border-[#E2E8E5] flex flex-col min-h-0 overflow-hidden">
+          {/* Tabs Bar */}
+          <div className="flex items-center gap-1.5 pb-2.5 mb-3 border-b border-[#E2E8E5] flex-shrink-0 select-none overflow-x-auto">
             {tabs.map(tab => {
               const isActive = tab.id === activeTabId;
               return (
@@ -344,23 +344,23 @@ export const App: React.FC = () => {
                     setActiveTabId(tab.id);
                     if (tab.tableName) setSelectedTable(tab.tableName);
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
                     isActive
-                      ? 'bg-[#181820] text-white shadow-sm'
-                      : 'bg-slate-100 hover:bg-slate-200/80 text-slate-600'
+                      ? 'bg-[#0C1818] text-[#00F566] border border-[#1E3B3A] shadow-sm'
+                      : 'bg-[#F2F6F4] hover:bg-[#E5ECE9] text-[#142929]'
                   }`}
                 >
                   {tab.type === 'query' ? (
-                    <span className="font-mono text-[11px] font-bold text-pink-400">&lt;&gt;</span>
+                    <span className="font-mono text-[11px] font-bold text-[#00F566]">&lt;&gt;</span>
                   ) : tab.type === 'view' ? (
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor">
                       <rect x="1.5" y="2" width="13" height="12" rx="1.5" strokeWidth="1.3" strokeDasharray="2 1.5" />
                       <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
                       <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
                       <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
                     </svg>
                   ) : (
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="currentColor">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#00F566] flex-shrink-0" fill="currentColor">
                       <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
                       <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
                       <line x1="1.5" y1="10" x2="14.5" y2="10" strokeWidth="1.2" />
@@ -372,13 +372,13 @@ export const App: React.FC = () => {
                   <span>{tab.title}</span>
 
                   {tab.type !== 'query' && (
-                    <span className="text-[10px] text-slate-400 font-mono font-normal">[all]</span>
+                    <span className="text-[10px] text-[#8EA8A3] font-mono font-normal">[all]</span>
                   )}
 
                   {tabs.length > 1 && (
                     <button
                       onClick={e => handleCloseTab(tab.id, e)}
-                      className="hover:opacity-75 p-0.5 rounded-full text-slate-400 hover:text-white"
+                      className="hover:opacity-75 p-0.5 rounded-full text-[#8EA8A3] hover:text-white"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -390,10 +390,10 @@ export const App: React.FC = () => {
             {/* New Tab Button */}
             <button
               onClick={handleOpenNewQuery}
-              className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+              className="p-1.5 rounded-xl hover:bg-[#F2F6F4] text-[#64837E] hover:text-[#0C1818] transition-colors"
               title="Nova Consulta SQL (Ctrl+N)"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 stroke-[2.5]" />
             </button>
           </div>
 

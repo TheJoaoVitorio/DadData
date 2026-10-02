@@ -4,14 +4,11 @@ import {
   FileSpreadsheet,
   Plus,
   Trash2,
-  Edit2,
   Check,
   X,
   Search,
   Clock,
-  ArrowUpDown,
-  Filter,
-  CheckCircle2
+  ArrowUpDown
 } from 'lucide-react';
 import { QueryResult, ColumnInfo } from '@shared/types/database';
 
@@ -48,19 +45,19 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-400">
-        <div className="w-10 h-10 border-3 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-3" />
-        <p className="text-xs font-medium">Carregando dados...</p>
+      <div className="flex-1 flex flex-col items-center justify-center p-12 text-[#64837E]">
+        <div className="w-8 h-8 border-3 border-[#E2E8E5] border-t-[#00F566] rounded-full animate-spin mb-3" />
+        <p className="text-xs font-semibold text-[#142929]">Carregando dados da tabela...</p>
       </div>
     );
   }
 
   if (!queryResult || queryResult.columns.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-400">
-        <FileSpreadsheet className="w-12 h-12 mb-3 text-slate-300 stroke-1" />
-        <p className="text-sm font-semibold text-slate-700">Nenhum dado para exibir</p>
-        <p className="text-xs text-slate-400 mt-1">Selecione uma tabela à esquerda ou execute uma consulta SQL.</p>
+      <div className="flex-1 flex flex-col items-center justify-center p-12 text-[#64837E]">
+        <FileSpreadsheet className="w-12 h-12 mb-3 text-[#A0B5B1] stroke-1" />
+        <p className="text-sm font-bold text-[#142929]">Nenhum dado para exibir</p>
+        <p className="text-xs text-[#64837E] mt-1">Selecione uma tabela à esquerda ou execute uma consulta SQL.</p>
       </div>
     );
   }
@@ -155,44 +152,44 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 select-none">
-      {/* Top Header Bar (Nocra UI Table Style - Image 3) */}
-      <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100 flex-shrink-0">
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between pb-3 mb-2 border-b border-[#E2E8E5] flex-shrink-0">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">{title}</h2>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+          <h2 className="text-xl font-bold tracking-tight text-[#0C1818]">{title}</h2>
+          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#00F566]/15 text-[#047857] border border-[#00F566]/30">
             {totalRows} registros
           </span>
           {queryResult.executionTimeMs !== undefined && (
-            <span className="text-xs font-medium text-slate-400 flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
+            <span className="text-xs font-mono text-[#64837E] flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-[#00F566]" />
               {queryResult.executionTimeMs}ms
             </span>
           )}
         </div>
 
-        {/* Action Buttons in Pill Format */}
+        {/* Action Buttons in AbacatePay Pill Format */}
         <div className="flex items-center gap-2">
           {/* Search Box */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#64837E]" />
             <input
               type="text"
-              placeholder="Buscar nos resultados..."
+              placeholder="Buscar dados..."
               value={searchTerm}
               onChange={e => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="pl-8 pr-3 py-1.5 bg-slate-50 hover:bg-slate-100 focus:bg-white text-xs rounded-full border border-slate-200/80 focus:outline-none focus:ring-2 focus:ring-purple-300 w-48 transition-all"
+              className="pl-8 pr-3 py-1.5 bg-[#F8FAF9] hover:bg-[#F2F6F4] focus:bg-white text-xs rounded-full border border-[#D3DDD8] focus:border-[#00F566] focus:outline-none w-48 transition-all font-mono"
             />
           </div>
 
           {/* Add Row Button */}
           <button
             onClick={onOpenAddRow}
-            className="h-8 px-3 rounded-full bg-[#121217] hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+            className="h-8 px-3 rounded-full bg-[#0C1818] hover:bg-[#142929] text-[#00F566] border border-[#1E3B3A] text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>Adicionar</span>
           </button>
 
@@ -200,9 +197,9 @@ export const DataGrid: React.FC<DataGridProps> = ({
           <button
             onClick={onExportCsv}
             title="Exportar para CSV (Compatível com Excel)"
-            className="h-8 px-3 rounded-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/80 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+            className="h-8 px-3 rounded-full bg-white hover:bg-[#F2F6F4] text-[#142929] border border-[#D3DDD8] text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
           >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
+            <Download className="w-3.5 h-3.5 text-[#64837E]" />
             <span>CSV</span>
           </button>
 
@@ -210,50 +207,50 @@ export const DataGrid: React.FC<DataGridProps> = ({
           <button
             onClick={onExportExcel}
             title="Exportar Planilha Excel Formatada (.xlsx)"
-            className="h-8 px-3 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+            className="h-8 px-3 rounded-full bg-[#00F566]/15 hover:bg-[#00F566]/25 text-[#047857] border border-[#00F566]/30 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <FileSpreadsheet className="w-3.5 h-3.5 text-[#047857]" />
             <span>Excel</span>
           </button>
         </div>
       </div>
 
       {/* Table Container */}
-      <div className="flex-1 overflow-auto rounded-2xl border border-slate-200/70 bg-white shadow-sm relative">
+      <div className="flex-1 overflow-auto rounded-2xl border border-[#E2E8E5] bg-white shadow-sm relative">
         <table className="w-full text-left border-collapse text-xs">
           {/* Table Header */}
-          <thead className="bg-slate-50/90 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-200/70">
+          <thead className="bg-[#F2F6F4] sticky top-0 z-10 border-b border-[#E2E8E5]">
             <tr>
-              <th className="py-2.5 px-3 w-12 text-center text-slate-400 font-mono text-[10px]">#</th>
+              <th className="py-2.5 px-3 w-12 text-center text-[#64837E] font-mono text-[10px]">#</th>
               {columns.map(col => {
                 const isPk = col === pkCol;
                 return (
                   <th
                     key={col}
                     onClick={() => handleSort(col)}
-                    className="py-2.5 px-3 text-slate-600 font-bold uppercase tracking-wider text-[11px] cursor-pointer hover:bg-slate-100/60 transition-colors select-none"
+                    className="py-2.5 px-3 text-[#142929] font-bold uppercase tracking-wider text-[11px] cursor-pointer hover:bg-[#E5ECE9] transition-colors select-none"
                   >
                     <div className="flex items-center gap-1.5">
                       <span>{col}</span>
                       {isPk && (
-                        <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-purple-100 text-purple-700">
+                        <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-[#00F566]/20 text-[#047857] border border-[#00F566]/40 font-bold">
                           PK
                         </span>
                       )}
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 ml-auto opacity-0 group-hover:opacity-100" />
+                      <ArrowUpDown className="w-3 h-3 text-[#64837E] ml-auto opacity-0 group-hover:opacity-100" />
                     </div>
                   </th>
                 );
               })}
-              <th className="py-2.5 px-3 w-16 text-center text-slate-400">Ações</th>
+              <th className="py-2.5 px-3 w-16 text-center text-[#64837E]">Ações</th>
             </tr>
           </thead>
 
           {/* Table Body */}
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[#E2E8E5]">
             {paginatedRows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + 2} className="text-center py-10 text-slate-400">
+                <td colSpan={columns.length + 2} className="text-center py-10 text-[#64837E]">
                   Nenhum registro encontrado.
                 </td>
               </tr>
@@ -263,9 +260,9 @@ export const DataGrid: React.FC<DataGridProps> = ({
                 return (
                   <tr
                     key={rIdx}
-                    className="hover:bg-purple-50/25 transition-colors group"
+                    className="hover:bg-[#F2F6F4] transition-colors group"
                   >
-                    <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">
+                    <td className="py-2 px-3 text-center text-[#8EA8A3] font-mono text-[11px]">
                       {globalRowIdx + 1}
                     </td>
 
@@ -278,7 +275,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                         <td
                           key={col}
                           onDoubleClick={() => handleStartEdit(globalRowIdx, col, val)}
-                          className="py-2 px-3 text-slate-800 font-normal relative"
+                          className="py-2 px-3 text-[#142929] font-normal relative"
                         >
                           {isEditing ? (
                             <div className="flex items-center gap-1">
@@ -291,17 +288,17 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                   if (e.key === 'Enter') handleSaveEdit(row);
                                   if (e.key === 'Escape') setEditingCell(null);
                                 }}
-                                className="w-full px-2 py-1 bg-white border border-purple-400 rounded-lg text-xs focus:outline-none ring-2 ring-purple-200"
+                                className="w-full px-2 py-1 bg-white border border-[#00F566] rounded-lg text-xs focus:outline-none ring-2 ring-[#00F566]/20 font-mono"
                               />
                               <button
                                 onClick={() => handleSaveEdit(row)}
-                                className="p-1 rounded bg-purple-600 text-white hover:bg-purple-700"
+                                className="p-1 rounded bg-[#00F566] text-[#0C1818] hover:bg-[#00DF61]"
                               >
-                                <Check className="w-3 h-3" />
+                                <Check className="w-3 h-3 stroke-[2.5]" />
                               </button>
                               <button
                                 onClick={() => setEditingCell(null)}
-                                className="p-1 rounded bg-slate-200 text-slate-600 hover:bg-slate-300"
+                                className="p-1 rounded bg-[#E2E8E5] text-[#142929] hover:bg-[#D3DDD8]"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -309,16 +306,16 @@ export const DataGrid: React.FC<DataGridProps> = ({
                           ) : (
                             <div
                               title="Dê um duplo clique para editar"
-                              className="cursor-pointer truncate max-w-[280px]"
+                              className="cursor-pointer truncate max-w-[280px] font-mono text-[11px]"
                             >
                               {val === null || val === undefined ? (
-                                <span className="text-slate-300 italic text-[11px]">null</span>
+                                <span className="text-[#A0B5B1] italic">null</span>
                               ) : typeof val === 'boolean' ? (
                                 <span
-                                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono ${
                                     val
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                                      : 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                                      ? 'bg-[#00F566]/20 text-[#047857] border border-[#00F566]/30'
+                                      : 'bg-rose-50 text-rose-700 border border-rose-200'
                                   }`}
                                 >
                                   {val ? 'TRUE' : 'FALSE'}
@@ -337,7 +334,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                       <button
                         onClick={() => handleDelete(row)}
                         title="Excluir Registro"
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-[#8EA8A3] hover:text-rose-600 hover:bg-rose-50 transition-all"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -353,21 +350,21 @@ export const DataGrid: React.FC<DataGridProps> = ({
       {/* Pagination Footer */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-2.5 px-2 flex-shrink-0">
-          <p className="text-xs text-slate-500 font-medium">
+          <p className="text-xs text-[#64837E] font-medium">
             Página {currentPage} de {totalPages} ({totalRows} itens no total)
           </p>
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold disabled:opacity-40 transition-colors"
+              className="px-3 py-1 rounded-full bg-white hover:bg-[#F2F6F4] text-[#142929] border border-[#D3DDD8] text-xs font-semibold disabled:opacity-40 transition-colors"
             >
               Anterior
             </button>
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 rounded-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold disabled:opacity-40 transition-colors"
+              className="px-3 py-1 rounded-full bg-white hover:bg-[#F2F6F4] text-[#142929] border border-[#D3DDD8] text-xs font-semibold disabled:opacity-40 transition-colors"
             >
               Próxima
             </button>
@@ -377,3 +374,4 @@ export const DataGrid: React.FC<DataGridProps> = ({
     </div>
   );
 };
+export default DataGrid;

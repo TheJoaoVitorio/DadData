@@ -6,33 +6,54 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Fustat', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
       colors: {
-        nocra: {
-          bg: "#F9FAFC",
+        abacate: {
+          bg: "#F8FAF9",
           card: "#FFFFFF",
-          cardHover: "#FAFAFA",
-          dark: "#111116",
-          darkCard: "#16161D",
-          darkBorder: "#272733",
-          border: "#E9ECF1",
-          subtle: "#71717A",
-          muted: "#A1A1AA",
-          accent: "#6366F1",
-          auraPurple: "#E0D7FE",
-          auraPink: "#FCE7F3",
-          auraBlue: "#E0F2FE",
-          auraMint: "#DCFCE7",
+          cardHover: "#F2F6F4",
+          border: "#E2E8E5",
+          borderDark: "#1E3B3A",
+          dark: "#0C1818",
+          surface: "#112323",
+          surfaceLight: "#183232",
+          panel: "#1E3C3C",
+          primary: "#00F566",
+          primaryHover: "#00DF61",
+          primaryDark: "#028A3B",
+          forest: "#142929",
+          subtle: "#64837E",
+          muted: "#8EA8A3",
+        },
+        nocra: {
+          bg: "#F8FAF9",
+          card: "#FFFFFF",
+          cardHover: "#F2F6F4",
+          dark: "#0C1818",
+          darkCard: "#112323",
+          darkBorder: "#1E3B3A",
+          border: "#E2E8E5",
+          subtle: "#64837E",
+          muted: "#8EA8A3",
+          accent: "#00F566",
         }
       },
       borderRadius: {
+        'xl': '14px',
         '2xl': '20px',
-        '3xl': '28px',
-        '4xl': '36px'
+        '3xl': '26px',
+        '4xl': '32px'
       },
       boxShadow: {
-        'nocra-card': '0 10px 30px -10px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02)',
-        'nocra-float': '0 20px 45px -12px rgba(100, 116, 139, 0.15)',
-        'nocra-glow': '0 0 25px rgba(192, 132, 252, 0.25)',
+        'abacate-card': '0 4px 20px -4px rgba(12, 24, 24, 0.06), 0 2px 6px -1px rgba(12, 24, 24, 0.03)',
+        'abacate-float': '0 12px 35px -8px rgba(12, 24, 24, 0.18)',
+        'abacate-glow': '0 0 20px rgba(0, 245, 102, 0.35)',
+        'nocra-card': '0 4px 20px -4px rgba(12, 24, 24, 0.06), 0 2px 6px -1px rgba(12, 24, 24, 0.03)',
+        'nocra-float': '0 12px 35px -8px rgba(12, 24, 24, 0.18)',
+        'nocra-glow': '0 0 20px rgba(0, 245, 102, 0.35)',
       }
     },
   },

@@ -39,9 +39,9 @@ interface SidebarProps {
   isLoading?: boolean;
 }
 
-// Beekeeper Studio golden table grid icon
+// AbacatePay clean Table grid icon
 const TableGridIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
-  <svg viewBox="0 0 16 16" className={`${className} text-amber-400 flex-shrink-0`} fill="currentColor">
+  <svg viewBox="0 0 16 16" className={`${className} text-[#00F566] flex-shrink-0`} fill="currentColor">
     <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
     <line x1="1.5" y1="6" x2="14.5" y2="6" stroke="currentColor" strokeWidth="1.2" />
     <line x1="1.5" y1="10" x2="14.5" y2="10" stroke="currentColor" strokeWidth="1.2" />
@@ -50,9 +50,9 @@ const TableGridIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-
   </svg>
 );
 
-// Beekeeper Studio cyan view grid icon
+// AbacatePay clean View grid icon
 const ViewGridIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
-  <svg viewBox="0 0 16 16" className={`${className} text-sky-400 flex-shrink-0`} fill="none" stroke="currentColor">
+  <svg viewBox="0 0 16 16" className={`${className} text-emerald-400 flex-shrink-0`} fill="none" stroke="currentColor">
     <rect x="1.5" y="2" width="13" height="12" rx="1.5" strokeWidth="1.3" strokeDasharray="2 1.5" />
     <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
     <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
@@ -73,33 +73,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onRefreshSchema,
   isLoading = false
 }) => {
-  // Activity rail selection: 'explorer' | 'pinned' | 'history'
   const [activeRail, setActiveRail] = useState<'explorer' | 'pinned' | 'history'>('explorer');
-
-  // Search filter
   const [filterText, setFilterText] = useState('');
-
-  // Dropdown for connections
   const [isConnDropdownOpen, setIsConnDropdownOpen] = useState(false);
-
-  // Pinned items persisted per connection
   const [pinnedEntities, setPinnedEntities] = useState<string[]>([]);
-
-  // Expanded tables in tree (for columns)
   const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
-
-  // Expanded schemas in tree
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set(['public', 'main', 'default']));
-
-  // Column metadata cache: tableName -> ColumnInfo[]
   const [columnsCache, setColumnsCache] = useState<Record<string, ColumnInfo[]>>({});
   const [loadingColumns, setLoadingColumns] = useState<Record<string, boolean>>({});
-
-  // Collapsed sections
   const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
   const [isEntitiesSectionOpen, setIsEntitiesSectionOpen] = useState(true);
 
-  // Load pinned entities from localStorage when connection changes
   useEffect(() => {
     if (!activeConnection) {
       setPinnedEntities([]);
@@ -110,7 +94,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       if (saved) {
         setPinnedEntities(JSON.parse(saved));
       } else {
-        // Default pin first 2 tables if any
         const defaults = tables.slice(0, 2).map(t => t.name);
         setPinnedEntities(defaults);
       }
@@ -137,7 +120,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     if (isExpanding) {
       next.add(name);
-      // Fetch columns if not cached
       if (!columnsCache[name] && activeConnection) {
         setLoadingColumns(prev => ({ ...prev, [name]: true }));
         try {
@@ -166,17 +148,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setExpandedSchemas(next);
   };
 
-  // Filter entities
   const filteredTables = tables.filter(t =>
     t.name.toLowerCase().includes(filterText.toLowerCase()) ||
     (t.schema && t.schema.toLowerCase().includes(filterText.toLowerCase()))
   );
 
-  // Group entities by schema
   const schemasPresent = Array.from(new Set(filteredTables.map(t => t.schema || 'default')));
   const hasMultipleSchemas = schemasPresent.length > 1;
 
-  // Separate tables vs views
   const isView = (t: TableInfo) => t.type === 'view';
   const pinnedList = tables.filter(t => pinnedEntities.includes(t.name));
 
@@ -197,43 +176,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => onSelectTable(entity.name)}
           className={`h-7 px-2 flex items-center justify-between text-xs cursor-pointer group rounded-lg transition-colors select-none ${
             isSelected
-              ? 'bg-[#272730] text-white font-medium'
-              : 'text-slate-300 hover:bg-[#202026] hover:text-white'
+              ? 'bg-[#183434] text-[#00F566] font-semibold'
+              : 'text-slate-300 hover:bg-[#162A2A] hover:text-white'
           }`}
         >
           <div className="flex items-center gap-1.5 min-w-0">
-            {/* Expand Chevron */}
             <button
               onClick={e => toggleExpandEntity(entity.name, e)}
-              className="p-0.5 -ml-1 text-slate-400 hover:text-slate-200 transition-transform"
+              className="p-0.5 -ml-1 text-[#64837E] hover:text-white transition-transform"
               title="Ver colunas"
             >
               <ChevronRight
-                className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90 text-slate-200' : ''}`}
+                className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90 text-[#00F566]' : ''}`}
               />
             </button>
 
-            {/* Icon: Table (golden) or View (cyan) */}
             {isView(entity) ? <ViewGridIcon /> : <TableGridIcon />}
 
-            {/* Name */}
             <span className="truncate text-[12px]">{entity.name}</span>
           </div>
 
           <div className="flex items-center gap-1 flex-shrink-0">
-            {/* Row count pill if available */}
             {entity.rowCount !== undefined && (
-              <span className="text-[10px] text-slate-500 font-mono hidden group-hover:inline-block">
+              <span className="text-[10px] text-[#64837E] font-mono hidden group-hover:inline-block">
                 {entity.rowCount}
               </span>
             )}
 
-            {/* Pin / Unpin Button */}
             {isPinnedItem ? (
               <button
                 onClick={e => togglePin(entity.name, e)}
                 title="Desafixar tabela"
-                className="opacity-60 hover:opacity-100 p-0.5 text-amber-400 hover:text-rose-400"
+                className="opacity-70 hover:opacity-100 p-0.5 text-[#00F566] hover:text-rose-400"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -243,42 +217,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 title={isItemPinned ? 'Desafixar' : 'Fixar no topo'}
                 className={`p-0.5 transition-opacity ${
                   isItemPinned
-                    ? 'text-amber-400 opacity-100'
-                    : 'text-slate-500 hover:text-amber-400 opacity-0 group-hover:opacity-100'
+                    ? 'text-[#00F566] opacity-100'
+                    : 'text-[#64837E] hover:text-[#00F566] opacity-0 group-hover:opacity-100'
                 }`}
               >
                 <Star
-                  className={`w-3 h-3 ${isItemPinned ? 'fill-amber-400' : ''}`}
+                  className={`w-3 h-3 ${isItemPinned ? 'fill-[#00F566]' : ''}`}
                 />
               </button>
             )}
           </div>
         </div>
 
-        {/* Expanded Columns Tree */}
         {isExpanded && (
-          <div className="pl-6 pr-1 py-1 space-y-0.5 border-l border-slate-700/50 ml-3.5 my-0.5">
+          <div className="pl-6 pr-1 py-1 space-y-0.5 border-l border-[#1E3B3A] ml-3.5 my-0.5">
             {isLoadingCols ? (
-              <div className="text-[11px] text-slate-500 py-0.5 pl-2 animate-pulse">Carregando colunas...</div>
+              <div className="text-[11px] text-[#64837E] py-0.5 pl-2 animate-pulse">Carregando colunas...</div>
             ) : columns.length === 0 ? (
-              <div className="text-[11px] text-slate-500 py-0.5 pl-2">Nenhuma coluna detalhada.</div>
+              <div className="text-[11px] text-[#64837E] py-0.5 pl-2">Nenhuma coluna detalhada.</div>
             ) : (
               columns.map(col => (
                 <div
                   key={col.name}
-                  className="flex items-center justify-between text-[11px] py-0.5 px-1.5 rounded hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                  className="flex items-center justify-between text-[11px] py-0.5 px-1.5 rounded hover:bg-white/5 text-[#8EA8A3] hover:text-white"
                 >
                   <div className="flex items-center gap-1.5 truncate">
                     {col.isPrimaryKey ? (
-                      <KeyRound className="w-2.5 h-2.5 text-amber-400 flex-shrink-0" />
+                      <KeyRound className="w-2.5 h-2.5 text-[#00F566] flex-shrink-0" />
                     ) : (
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-600 flex-shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#2A4D4A] flex-shrink-0" />
                     )}
-                    <span className={`truncate ${col.isPrimaryKey ? 'text-amber-200 font-semibold' : ''}`}>
+                    <span className={`truncate ${col.isPrimaryKey ? 'text-[#00F566] font-semibold' : ''}`}>
                       {col.name}
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono ml-2 uppercase truncate flex-shrink-0">
+                  <span className="text-[10px] text-[#64837E] font-mono ml-2 uppercase truncate flex-shrink-0">
                     {col.type}
                   </span>
                 </div>
@@ -291,22 +264,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-80 bg-[#16161c] text-slate-300 rounded-3xl flex overflow-hidden shadow-nocra-card border border-white/5 select-none z-10">
-      {/* 1. Leftmost Activity Rail (Beekeeper Studio Style) */}
-      <div className="w-11 bg-[#101014] flex flex-col items-center py-3 border-r border-white/5 space-y-3.5 flex-shrink-0">
+    <aside className="w-80 bg-[#112323] text-slate-300 rounded-3xl flex overflow-hidden shadow-abacate-card border border-[#1E3B3A] select-none z-10">
+      {/* 1. Leftmost Activity Rail (AbacatePay Deep Petroleum) */}
+      <div className="w-11 bg-[#0C1818] flex flex-col items-center py-3 border-r border-[#1E3B3A] space-y-3.5 flex-shrink-0">
         {/* Explorer icon */}
         <button
           onClick={() => setActiveRail('explorer')}
           title="Tabelas e Entidades"
           className={`p-2 rounded-xl transition-all relative ${
             activeRail === 'explorer'
-              ? 'text-white bg-white/10 shadow-sm'
-              : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+              ? 'text-[#00F566] bg-white/10 shadow-sm'
+              : 'text-[#64837E] hover:text-white hover:bg-white/5'
           }`}
         >
           <Database className="w-4 h-4" />
           {activeRail === 'explorer' && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-purple-500 rounded-r" />
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[#00F566] rounded-r" />
           )}
         </button>
 
@@ -316,33 +289,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="Tabelas Fixadas / Favoritos"
           className={`p-2 rounded-xl transition-all relative ${
             activeRail === 'pinned'
-              ? 'text-amber-400 bg-white/10 shadow-sm'
-              : 'text-slate-500 hover:text-amber-300 hover:bg-white/5'
+              ? 'text-[#00F566] bg-white/10 shadow-sm'
+              : 'text-[#64837E] hover:text-[#00F566] hover:bg-white/5'
           }`}
         >
-          <Star className={`w-4 h-4 ${pinnedEntities.length > 0 ? 'fill-amber-400/20' : ''}`} />
+          <Star className={`w-4 h-4 ${pinnedEntities.length > 0 ? 'fill-[#00F566]/20' : ''}`} />
           {activeRail === 'pinned' && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-amber-400 rounded-r" />
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[#00F566] rounded-r" />
           )}
         </button>
 
-        {/* History */}
+        {/* New Query Shortcut */}
         <button
           onClick={() => onOpenNewQuery()}
           title="Novo Editor SQL (Ctrl+N)"
-          className="p-2 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+          className="p-2 rounded-xl text-[#64837E] hover:text-[#00F566] hover:bg-white/5 transition-all"
         >
           <Clock className="w-4 h-4" />
         </button>
 
         <div className="flex-1" />
 
-        {/* Disconnect or settings at bottom */}
+        {/* Disconnect button at bottom */}
         {activeConnection && (
           <button
             onClick={onDisconnect}
             title="Desconectar banco de dados"
-            className="p-2 rounded-xl text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+            className="p-2 rounded-xl text-[#64837E] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
           >
             <Power className="w-4 h-4" />
           </button>
@@ -350,13 +323,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* 2. Main Sidebar Explorer Area */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#16161c]">
-        {/* Header with Connection Dropdown (Beekeeper Signature) */}
-        <div className="p-3 border-b border-white/5 relative">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#112323]">
+        {/* Header with Connection Dropdown */}
+        <div className="p-3 border-b border-[#1E3B3A] relative">
           <div className="flex items-center justify-between gap-1.5">
             <button
               onClick={() => setIsConnDropdownOpen(!isConnDropdownOpen)}
-              className="flex-1 min-w-0 text-left px-2 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-between"
+              className="flex-1 min-w-0 text-left px-2 py-1.5 rounded-xl bg-[#162E2E] hover:bg-[#1A3838] border border-[#1E3B3A] transition-colors flex items-center justify-between"
             >
               <div className="flex items-center gap-2 min-w-0">
                 {activeConnection && (
@@ -368,7 +341,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     : activeConnection?.name || 'Selecione Conexão'}
                 </span>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 ml-1" />
+              <ChevronDown className="w-3.5 h-3.5 text-[#64837E] flex-shrink-0 ml-1" />
             </button>
 
             {/* Refresh Schema Button */}
@@ -376,9 +349,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={onRefreshSchema}
               disabled={isLoading || !activeConnection}
               title="Recarregar Esquema"
-              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded-xl bg-[#162E2E] hover:bg-[#1A3838] border border-[#1E3B3A] text-[#64837E] hover:text-[#00F566] transition-colors"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#00F566]' : ''}`} />
             </button>
           </div>
 
@@ -386,8 +359,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isConnDropdownOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setIsConnDropdownOpen(false)} />
-              <div className="absolute left-3 right-3 top-full mt-1 bg-[#1e1e26] border border-white/10 rounded-2xl p-2 shadow-2xl z-40 space-y-1">
-                <div className="px-2 py-1 text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+              <div className="absolute left-3 right-3 top-full mt-1 bg-[#162E2E] border border-[#1E3B3A] rounded-2xl p-2 shadow-2xl z-40 space-y-1">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase text-[#64837E] tracking-wider">
                   Conexões Salvas
                 </div>
 
@@ -402,7 +375,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                       className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors ${
                         isActive
-                          ? 'bg-purple-600/30 text-purple-200 border border-purple-500/30 font-semibold'
+                          ? 'bg-[#00F566]/20 text-[#00F566] border border-[#00F566]/40 font-semibold'
                           : 'text-slate-300 hover:bg-white/5 hover:text-white'
                       }`}
                     >
@@ -410,22 +383,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <DatabaseIcon type={c.type} className="w-3.5 h-3.5 flex-shrink-0" />
                         <span className="truncate">{c.name}</span>
                       </div>
-                      <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-white/10 text-slate-400 font-mono">
+                      <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-black/30 text-[#8EA8A3] font-mono">
                         {c.type}
                       </span>
                     </button>
                   );
                 })}
 
-                <div className="pt-1.5 border-t border-white/5 mt-1">
+                <div className="pt-1.5 border-t border-[#1E3B3A] mt-1">
                   <button
                     onClick={() => {
                       setIsConnDropdownOpen(false);
                       onOpenNewConnection();
                     }}
-                    className="w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold text-purple-300 hover:bg-purple-500/10 flex items-center gap-2 transition-colors"
+                    className="w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold text-[#00F566] hover:bg-[#00F566]/10 flex items-center gap-2 transition-colors"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Nova Conexão...</span>
                   </button>
                 </div>
@@ -433,43 +406,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </>
           )}
 
-          {/* Filter Bar (Beekeeper Input) */}
+          {/* Filter Bar */}
           <div className="relative mt-2.5">
             <input
               type="text"
-              placeholder="Filter"
+              placeholder="Filtrar tabelas e views..."
               value={filterText}
               onChange={e => setFilterText(e.target.value)}
-              className="w-full bg-[#1e1e26] text-slate-200 placeholder-slate-500 text-xs px-2.5 py-1.5 pr-7 rounded-xl border border-white/5 focus:outline-none focus:border-purple-500/50 transition-colors"
+              className="w-full bg-[#0C1818] text-slate-200 placeholder-[#64837E] text-xs px-2.5 py-1.5 pr-7 rounded-xl border border-[#1E3B3A] focus:outline-none focus:border-[#00F566] transition-colors"
             />
             {filterText ? (
               <button
                 onClick={() => setFilterText('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#64837E] hover:text-white"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             ) : (
-              <Filter className="w-3 h-3 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Filter className="w-3 h-3 text-[#64837E] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             )}
           </div>
         </div>
 
         {/* Tree Content: PINNED & ENTITIES */}
-        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3">
-          {/* PINNED Section (Beekeeper Signature) */}
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3 dark-scroll">
+          {/* PINNED Section */}
           {pinnedList.length > 0 && activeRail !== 'pinned' && (
             <div>
               <div
                 onClick={() => setIsPinnedSectionOpen(!isPinnedSectionOpen)}
-                className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-200 select-none"
+                className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-[#8EA8A3] uppercase tracking-wider cursor-pointer hover:text-white select-none"
               >
                 <div className="flex items-center gap-1.5">
                   <ChevronRight
-                    className={`w-3 h-3 transition-transform ${isPinnedSectionOpen ? 'rotate-90' : ''}`}
+                    className={`w-3 h-3 transition-transform ${isPinnedSectionOpen ? 'rotate-90 text-[#00F566]' : ''}`}
                   />
-                  <span>PINNED</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-slate-300 font-mono font-normal">
+                  <span>FIXADAS</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#00F566]/15 text-[#00F566] font-mono font-bold">
                     {pinnedList.length}
                   </span>
                 </div>
@@ -483,17 +456,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           )}
 
-          {/* ENTITIES Section (Tables, Schemas, Views) */}
+          {/* ENTITIES Section */}
           <div>
             <div
               onClick={() => setIsEntitiesSectionOpen(!isEntitiesSectionOpen)}
-              className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-200 select-none"
+              className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-[#8EA8A3] uppercase tracking-wider cursor-pointer hover:text-white select-none"
             >
               <div className="flex items-center gap-1.5">
                 <ChevronRight
-                  className={`w-3 h-3 transition-transform ${isEntitiesSectionOpen ? 'rotate-90' : ''}`}
+                  className={`w-3 h-3 transition-transform ${isEntitiesSectionOpen ? 'rotate-90 text-[#00F566]' : ''}`}
                 />
-                <span>ENTITIES</span>
+                <span>ENTIDADES</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-slate-300 font-mono font-normal">
                   {displayList.length}
                 </span>
@@ -503,13 +476,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {isEntitiesSectionOpen && (
               <div className="mt-1 space-y-0.5">
                 {displayList.length === 0 ? (
-                  <div className="text-center py-6 text-slate-500 text-xs">
+                  <div className="text-center py-6 text-[#64837E] text-xs">
                     {tables.length === 0
                       ? 'Nenhuma tabela ou conexão ativa.'
                       : 'Nenhuma entidade encontrada no filtro.'}
                   </div>
                 ) : hasMultipleSchemas ? (
-                  /* Grouped by Schemas */
                   schemasPresent.map(schema => {
                     const schemaEntities = displayList.filter(t => (t.schema || 'default') === schema);
                     if (schemaEntities.length === 0) return null;
@@ -517,26 +489,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                     return (
                       <div key={schema} className="mb-2">
-                        {/* Schema Header */}
                         <div
                           onClick={e => toggleExpandSchema(schema, e)}
-                          className="h-6 px-2 flex items-center justify-between text-xs text-slate-400 hover:text-white cursor-pointer select-none rounded hover:bg-white/5"
+                          className="h-6 px-2 flex items-center justify-between text-xs text-[#8EA8A3] hover:text-white cursor-pointer select-none rounded hover:bg-white/5"
                         >
                           <div className="flex items-center gap-1.5 truncate">
                             <ChevronRight
-                              className={`w-3 h-3 transition-transform ${isExpandedSchema ? 'rotate-90' : ''}`}
+                              className={`w-3 h-3 transition-transform ${isExpandedSchema ? 'rotate-90 text-[#00F566]' : ''}`}
                             />
                             {isExpandedSchema ? (
-                              <FolderOpen className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                              <FolderOpen className="w-3.5 h-3.5 text-[#00F566] flex-shrink-0" />
                             ) : (
-                              <Folder className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                              <Folder className="w-3.5 h-3.5 text-[#00F566] flex-shrink-0" />
                             )}
                             <span className="font-semibold truncate text-[11px]">{schema}</span>
                           </div>
-                          <span className="text-[10px] text-slate-500 font-mono">{schemaEntities.length}</span>
+                          <span className="text-[10px] text-[#64837E] font-mono">{schemaEntities.length}</span>
                         </div>
 
-                        {/* Schema Children */}
                         {isExpandedSchema && (
                           <div className="pl-3 space-y-0.5 mt-0.5">
                             {schemaEntities.map(entity => renderEntityItem(entity))}
@@ -546,7 +516,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     );
                   })
                 ) : (
-                  /* Flat Entities List (Single schema / SQLite / DBF / Paradox) */
                   displayList.map(entity => renderEntityItem(entity))
                 )}
               </div>
@@ -555,16 +524,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Quick Footer Action: New SQL Query Editor */}
-        <div className="p-2.5 border-t border-white/5">
+        <div className="p-2.5 border-t border-[#1E3B3A]">
           <button
             onClick={onOpenNewQuery}
-            className="w-full py-1.5 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs font-semibold flex items-center justify-between transition-colors"
+            className="w-full py-1.5 px-3 rounded-xl bg-[#00F566]/15 hover:bg-[#00F566]/25 border border-[#00F566]/30 text-[#00F566] text-xs font-semibold flex items-center justify-between transition-colors"
           >
             <span className="flex items-center gap-2">
-              <span className="text-purple-400 font-mono">&lt;&gt;</span>
+              <span className="text-[#00F566] font-mono">&lt;&gt;</span>
               <span>Novo Editor SQL</span>
             </span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-200 font-mono">
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#00F566]/20 text-[#00F566] font-mono font-bold">
               Ctrl+N
             </span>
           </button>
@@ -573,3 +542,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
+export default Sidebar;

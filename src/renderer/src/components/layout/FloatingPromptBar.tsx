@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Terminal, FileSpreadsheet, Download, Plus, ArrowRight } from 'lucide-react';
+import { Terminal, FileSpreadsheet, Download, Plus, ArrowRight, CornerDownLeft } from 'lucide-react';
 import { ConnectionConfig } from '@shared/types/database';
 import { DatabaseIcon } from '../icons/DatabaseIcon';
 
@@ -20,61 +20,61 @@ export const FloatingPromptBar: React.FC<FloatingPromptBarProps> = ({
   onExportExcel,
   isLoading
 }) => {
-  const [promptText, setPromptText] = useState('');
+  const [commandText, setCommandText] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!promptText.trim()) return;
-    onExecuteQuery(promptText);
-    setPromptText('');
+    if (!commandText.trim()) return;
+    onExecuteQuery(commandText);
+    setCommandText('');
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 pb-4 pt-1 z-20 flex flex-col items-center">
-      {/* Quick Action Chips (Matches Image 5: Write code, Generate image, etc.) */}
-      <div className="flex items-center gap-2 mb-2 select-none overflow-x-auto max-w-full py-1">
+    <div className="w-full max-w-4xl mx-auto px-4 pb-3 pt-1 z-20 flex flex-col items-center select-none">
+      {/* Quick Action Chips - Developer First, No AI Cliches */}
+      <div className="flex items-center gap-2 mb-2 overflow-x-auto max-w-full py-0.5">
         <button
           onClick={() => onExecuteQuery('SELECT * FROM ')}
-          className="px-3 py-1 rounded-full bg-white/80 hover:bg-white text-slate-700 border border-slate-200/70 text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+          className="px-3 py-1 rounded-full bg-white hover:bg-[#F2F6F4] text-[#142929] border border-[#D3DDD8] text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
         >
-          <span className="text-purple-600 font-mono">&lt; &gt;</span>
+          <span className="text-[#047857] font-mono font-bold">&lt;&gt;</span>
           <span>SELECT *</span>
         </button>
 
         <button
           onClick={onOpenAddRow}
-          className="px-3 py-1 rounded-full bg-white/80 hover:bg-white text-slate-700 border border-slate-200/70 text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+          className="px-3 py-1 rounded-full bg-white hover:bg-[#F2F6F4] text-[#142929] border border-[#D3DDD8] text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
         >
-          <Plus className="w-3 h-3 text-emerald-600" />
+          <Plus className="w-3.5 h-3.5 text-[#047857] stroke-[2.5]" />
           <span>Inserir Linha</span>
         </button>
 
         <button
           onClick={onExportCsv}
-          className="px-3 py-1 rounded-full bg-white/80 hover:bg-white text-slate-700 border border-slate-200/70 text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+          className="px-3 py-1 rounded-full bg-white hover:bg-[#F2F6F4] text-[#142929] border border-[#D3DDD8] text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
         >
-          <Download className="w-3 h-3 text-sky-600" />
+          <Download className="w-3.5 h-3.5 text-[#64837E]" />
           <span>Exportar CSV</span>
         </button>
 
         <button
           onClick={onExportExcel}
-          className="px-3 py-1 rounded-full bg-white/80 hover:bg-white text-slate-700 border border-slate-200/70 text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+          className="px-3 py-1 rounded-full bg-white hover:bg-[#F2F6F4] text-[#142929] border border-[#D3DDD8] text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
         >
-          <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
+          <FileSpreadsheet className="w-3.5 h-3.5 text-[#047857]" />
           <span>Exportar Excel</span>
         </button>
       </div>
 
-      {/* Signature Nocra Floating Query Bar with Iridescent Glow */}
-      <div className="w-full nocra-gradient-ring rounded-2xl">
+      {/* AbacatePay Developer Command Bar (Clean, High-Contrast, Petroleum & Lime) */}
+      <div className="w-full">
         <form
           onSubmit={handleSubmit}
-          className="bg-white/95 backdrop-blur-xl rounded-2xl p-2 px-3.5 shadow-nocra-float flex items-center gap-3 border border-white/60"
+          className="bg-[#112323] rounded-2xl p-2 px-3.5 shadow-abacate-float flex items-center gap-3 border border-[#1E3B3A]"
         >
-          {/* Sparkles Brand Icon */}
-          <div className="w-7 h-7 rounded-xl bg-purple-100/70 text-purple-700 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-4 h-4" />
+          {/* Terminal Developer Icon */}
+          <div className="w-7 h-7 rounded-xl bg-[#1A3838] border border-[#224444] text-[#00F566] flex items-center justify-center flex-shrink-0">
+            <Terminal className="w-4 h-4 stroke-[2.2]" />
           </div>
 
           {/* Quick Input Text */}
@@ -82,34 +82,35 @@ export const FloatingPromptBar: React.FC<FloatingPromptBarProps> = ({
             type="text"
             placeholder={
               activeConnection
-                ? `Digite consulta SQL em ${activeConnection.name}... (ex: SELECT * FROM clientes WHERE saldo > 1000)`
+                ? `Executar SQL rápido em ${activeConnection.name}... (ex: SELECT * FROM clientes WHERE saldo > 0)`
                 : 'Conecte-se a um banco de dados para executar consultas...'
             }
-            value={promptText}
-            onChange={e => setPromptText(e.target.value)}
+            value={commandText}
+            onChange={e => setCommandText(e.target.value)}
             disabled={!activeConnection}
-            className="flex-1 bg-transparent text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+            className="flex-1 bg-transparent text-xs text-white placeholder-[#64837E] font-mono focus:outline-none"
           />
 
           {/* Engine Pill Badge */}
           {activeConnection && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100/90 text-slate-700 text-[11px] font-mono select-none">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#183434] border border-[#1E3B3A] text-[#00F566] text-[11px] font-mono select-none">
               <DatabaseIcon type={activeConnection.type} className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="font-semibold uppercase">{activeConnection.type}</span>
             </div>
           )}
 
-          {/* Generate / Run Button */}
+          {/* Run Command Button (AbacatePay Neon) */}
           <button
             type="submit"
-            disabled={isLoading || !promptText.trim() || !activeConnection}
-            className="px-4 py-2 rounded-xl bg-[#121217] hover:bg-black text-white text-xs font-semibold flex items-center gap-2 transition-all active:scale-95 shadow-md disabled:opacity-40"
+            disabled={!activeConnection || !commandText.trim() || isLoading}
+            className="h-8 px-3.5 rounded-xl bg-[#00F566] hover:bg-[#00DF61] disabled:opacity-40 disabled:hover:bg-[#00F566] text-[#0C1818] font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95 flex-shrink-0"
           >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
             <span>Executar</span>
+            <CornerDownLeft className="w-3.5 h-3.5 stroke-[2.5]" />
           </button>
         </form>
       </div>
     </div>
   );
 };
+export default FloatingPromptBar;

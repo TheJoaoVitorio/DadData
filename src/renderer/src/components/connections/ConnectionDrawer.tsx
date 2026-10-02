@@ -168,44 +168,44 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity"
       />
 
       {/* Drawer Panel Sliding From Right */}
-      <aside className="fixed inset-y-0 right-0 z-50 w-[540px] max-w-full bg-white shadow-2xl flex flex-col border-l border-slate-200/80 animate-in slide-in-from-right duration-300">
+      <aside className="fixed inset-y-0 right-0 z-50 w-[540px] max-w-full bg-white shadow-2xl flex flex-col border-l border-[#E2E8E5] animate-in slide-in-from-right duration-300">
         {/* Drawer Header */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-5 border-b border-[#E2E8E5] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-2xl bg-purple-50 border border-purple-100">
+            <div className="p-2 rounded-2xl bg-[#0C1818] border border-[#1E3B3A]">
               <DatabaseIcon type={selectedEngine.type} className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Nova Conexão</h3>
-              <p className="text-xs text-slate-500">Escolha o banco e configure os parâmetros de acesso</p>
+              <h3 className="text-base font-bold text-[#0C1818]">Nova Conexão</h3>
+              <p className="text-xs text-[#64837E]">Selecione o motor e informe as credenciais</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+            className="p-2 rounded-full hover:bg-[#F2F6F4] text-[#64837E] hover:text-[#0C1818] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Category Filter Pills */}
-        <div className="px-5 pt-3 pb-2 flex gap-1.5 select-none bg-slate-50/50 border-b border-slate-100">
+        <div className="px-5 pt-3 pb-2 flex gap-1.5 select-none bg-[#F8FAF9] border-b border-[#E2E8E5]">
           {[
-            { id: 'all', label: 'Todos os Bancos' },
+            { id: 'all', label: 'Todos os Motores' },
             { id: 'legacy', label: 'Bancos Legados & ERP' },
             { id: 'modern', label: 'Modernos & Servidores' }
           ].map(cat => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id as any)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
                 activeCategory === cat.id
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200/70 hover:bg-slate-100'
+                  ? 'bg-[#0C1818] text-[#00F566] shadow-sm'
+                  : 'bg-white text-[#64837E] border border-[#D3DDD8] hover:bg-[#F2F6F4]'
               }`}
             >
               {cat.label}
@@ -213,9 +213,9 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
           ))}
         </div>
 
-        {/* Database Engine Selector Grid with Official SVGs */}
-        <div className="px-5 py-3 border-b border-slate-100">
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+        {/* Database Engine Selector Grid */}
+        <div className="px-5 py-3 border-b border-[#E2E8E5]">
+          <label className="block text-xs font-bold text-[#142929] uppercase tracking-wider mb-2">
             Motor de Banco de Dados
           </label>
           <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
@@ -228,14 +228,14 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                   onClick={() => handleSelectEngine(eng)}
                   className={`p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
                     isSelected
-                      ? 'border-purple-500 bg-purple-50/50 shadow-sm ring-2 ring-purple-200'
-                      : 'border-slate-200/70 hover:border-slate-300 hover:bg-slate-50/80'
+                      ? 'border-[#00F566] bg-[#00F566]/10 shadow-sm ring-2 ring-[#00F566]/20'
+                      : 'border-[#E2E8E5] hover:border-[#A0B5B1] hover:bg-[#F8FAF9]'
                   }`}
                 >
                   <DatabaseIcon type={eng.type} className="w-7 h-7 flex-shrink-0" />
                   <div className="truncate">
-                    <div className="text-xs font-bold text-slate-900 truncate">{eng.label}</div>
-                    <div className="text-[10px] text-slate-500 truncate">{eng.description}</div>
+                    <div className="text-xs font-bold text-[#0C1818] truncate">{eng.label}</div>
+                    <div className="text-[10px] text-[#64837E] truncate">{eng.description}</div>
                   </div>
                 </button>
               );
@@ -247,13 +247,13 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
         <form onSubmit={handleConnectSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Connection Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Identificação da Conexão</label>
+            <label className="block text-xs font-bold text-[#142929] mb-1">Identificação da Conexão</label>
             <input
               type="text"
               required
               value={connName}
               onChange={e => setConnName(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 focus:outline-none transition-all"
+              className="w-full px-3.5 py-2.5 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-medium focus:outline-none transition-all"
             />
           </div>
 
@@ -261,7 +261,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
             /* Firebird Configuration: File (.FDB) + Host / Port / User / Password */
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
+                <label className="block text-xs font-bold text-[#142929]">
                   Arquivo do Banco Firebird (.FDB / .GDB)
                 </label>
                 <div className="flex gap-2">
@@ -274,63 +274,63 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                       setFilePath(e.target.value);
                       setDatabase(e.target.value);
                     }}
-                    className="flex-1 px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 font-mono focus:outline-none"
+                    className="flex-1 px-3.5 py-2.5 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={handleBrowseFile}
-                    className="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm"
+                    className="px-3.5 py-2.5 rounded-xl bg-[#00F566]/15 hover:bg-[#00F566]/25 border border-[#00F566]/30 text-xs font-bold text-[#047857] flex items-center gap-1.5 shadow-sm transition-all"
                   >
-                    <FolderOpen className="w-3.5 h-3.5 text-purple-600" />
+                    <FolderOpen className="w-3.5 h-3.5 text-[#047857]" />
                     <span>Arquivo</span>
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-[#64837E]">
                   Selecione o arquivo do banco no seu computador (.FDB).
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Host / Servidor</label>
+                  <label className="block text-xs font-bold text-[#142929] mb-1">Host / Servidor</label>
                   <input
                     type="text"
                     required
                     value={host}
                     onChange={e => setHost(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Porta</label>
+                  <label className="block text-xs font-bold text-[#142929] mb-1">Porta</label>
                   <input
                     type="number"
                     value={port}
                     onChange={e => setPort(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Usuário</label>
+                  <label className="block text-xs font-bold text-[#142929] mb-1">Usuário</label>
                   <input
                     type="text"
                     required
                     value={user}
                     onChange={e => setUser(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Senha</label>
+                  <label className="block text-xs font-bold text-[#142929] mb-1">Senha</label>
                   <input
                     type="password"
                     required
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                 </div>
               </div>
@@ -338,7 +338,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
           ) : isFileBased ? (
             /* File Based Configuration */
             <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-[#142929] mb-1">
                 Caminho do Arquivo ou Diretório
               </label>
               <div className="flex gap-2">
@@ -348,85 +348,99 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                   placeholder="Ex: C:\Sistemas\CLIENTES.DBF ou pasta"
                   value={filePath}
                   onChange={e => setFilePath(e.target.value)}
-                  className="flex-1 px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 font-mono focus:outline-none"
+                  className="flex-1 px-3.5 py-2.5 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleBrowseFile}
-                  className="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm"
+                  className="px-3.5 py-2.5 rounded-xl bg-[#00F566]/15 hover:bg-[#00F566]/25 border border-[#00F566]/30 text-xs font-bold text-[#047857] flex items-center gap-1.5 shadow-sm transition-all"
                 >
-                  <FolderOpen className="w-3.5 h-3.5 text-purple-600" />
+                  <FolderOpen className="w-3.5 h-3.5 text-[#047857]" />
                   <span>Arquivo</span>
                 </button>
-                {selectedEngine.type === 'dbf' && (
+                {['dbf', 'paradox', 'hfsql'].includes(selectedEngine.type) && (
                   <button
                     type="button"
                     onClick={handleBrowseDir}
-                    className="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm"
+                    title="Selecionar pasta inteira contendo múltiplas tabelas"
+                    className="px-3 py-2.5 rounded-xl bg-white border border-[#D3DDD8] hover:bg-[#F2F6F4] text-xs font-semibold text-[#142929] flex items-center gap-1 shadow-sm"
                   >
-                    <FolderOpen className="w-3.5 h-3.5 text-amber-600" />
                     <span>Pasta</span>
                   </button>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400">
-                Selecione o arquivo de dados ou informe a pasta onde se encontram as tabelas.
+              <p className="text-[11px] text-[#64837E]">
+                {selectedEngine.type === 'dbf'
+                  ? 'Selecione um arquivo .DBF específico ou uma pasta com vários DBFs.'
+                  : selectedEngine.type === 'paradox'
+                  ? 'Selecione um arquivo .DB Borland Paradox.'
+                  : selectedEngine.type === 'access'
+                  ? 'Selecione um arquivo .MDB ou .ACCDB Microsoft Access.'
+                  : selectedEngine.type === 'hfsql'
+                  ? 'Selecione um arquivo .FIC PC SOFT HyperFileSQL.'
+                  : selectedEngine.type === 'nexusdb'
+                  ? 'Selecione um arquivo .NX1 NexusDB.'
+                  : 'Selecione o arquivo do banco SQLite em disco.'}
               </p>
             </div>
           ) : (
-            /* Server Based Configuration */
+            /* Client/Server Database (PostgreSQL, MySQL, SQL Server, MongoDB) */
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Host / IP</label>
+                  <label className="block text-xs font-bold text-[#142929] mb-1">Host / Servidor</label>
                   <input
                     type="text"
                     required
+                    placeholder="localhost ou IP"
                     value={host}
                     onChange={e => setHost(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Porta</label>
+                  <label className="block text-xs font-bold text-[#142929] mb-1">Porta</label>
                   <input
                     type="number"
+                    required
                     value={port}
                     onChange={e => setPort(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5">
+              <div>
+                <label className="block text-xs font-bold text-[#142929] mb-1">Nome do Banco de Dados</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: financeiro_db"
+                  value={database}
+                  onChange={e => setDatabase(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Database</label>
+                  <label className="block text-xs font-bold text-[#142929] mb-1">Usuário</label>
                   <input
                     type="text"
-                    placeholder="nome_do_banco"
-                    value={database}
-                    onChange={e => setDatabase(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Usuário</label>
-                  <input
-                    type="text"
-                    placeholder="postgres / root"
+                    placeholder="Ex: postgres, root, sa"
                     value={user}
                     onChange={e => setUser(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Senha</label>
+                  <label className="block text-xs font-bold text-[#142929] mb-1">Senha</label>
                   <input
                     type="password"
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
                   />
                 </div>
               </div>
@@ -438,12 +452,12 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
             <div
               className={`p-3 rounded-2xl text-xs flex items-center gap-2 border ${
                 testResult.success
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  ? 'bg-[#00F566]/15 text-[#047857] border-[#00F566]/30 font-semibold'
                   : 'bg-rose-50 text-rose-800 border-rose-200'
               }`}
             >
               {testResult.success ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-[#047857] flex-shrink-0" />
               ) : (
                 <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
               )}
@@ -453,14 +467,14 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
         </form>
 
         {/* Drawer Actions Footer */}
-        <div className="p-5 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="p-5 border-t border-[#E2E8E5] flex items-center justify-between bg-[#F8FAF9]">
           <button
             type="button"
             onClick={handleTest}
             disabled={isTesting}
-            className="px-4 py-2 rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 rounded-full border border-[#D3DDD8] bg-white text-xs font-bold text-[#142929] hover:bg-[#F2F6F4] transition-colors flex items-center gap-1.5 shadow-sm"
           >
-            <FileCheck className="w-3.5 h-3.5 text-slate-500" />
+            <FileCheck className="w-3.5 h-3.5 text-[#64837E]" />
             <span>{isTesting ? 'Testando...' : 'Testar Conexão'}</span>
           </button>
 
@@ -468,14 +482,14 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              className="px-4 py-2 rounded-full border border-[#D3DDD8] text-xs font-semibold text-[#64837E] hover:bg-[#E2E8E5] transition-colors"
             >
               Cancelar
             </button>
             <button
               onClick={handleConnectSubmit}
               disabled={isConnecting}
-              className="px-6 py-2.5 rounded-full bg-[#121217] hover:bg-black text-white text-xs font-semibold flex items-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-50"
+              className="px-6 py-2.5 rounded-full bg-[#00F566] hover:bg-[#00DF61] text-[#0C1818] text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50"
             >
               <span>{isConnecting ? 'Conectando...' : 'Conectar Banco'}</span>
             </button>
@@ -485,3 +499,4 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
     </>
   );
 };
+export default ConnectionDrawer;
