@@ -95,7 +95,7 @@ export const App: React.FC = () => {
           setSelectedTable(null);
         }
 
-        showToast(`Conectado com sucesso a ${config.name}!`);
+        showToast(`Conectado a ${config.name}! (${tableList.length} tabelas carregadas)`);
       }
     } catch (err: any) {
       showToast(`Erro na conexão: ${err.message}`, 'error');
@@ -127,7 +127,7 @@ export const App: React.FC = () => {
       if (selectedTable) {
         await handleSelectTable(selectedTable);
       }
-      showToast('Esquema e tabelas atualizados.');
+      showToast(`Esquema atualizado: ${tableList.length} tabelas carregadas.`);
     } catch (err: any) {
       showToast(`Erro ao atualizar: ${err.message}`, 'error');
     } finally {

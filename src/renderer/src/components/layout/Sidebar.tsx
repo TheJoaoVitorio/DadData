@@ -94,8 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       if (saved) {
         setPinnedEntities(JSON.parse(saved));
       } else {
-        const defaults = tables.slice(0, 2).map(t => t.name);
-        setPinnedEntities(defaults);
+        setPinnedEntities([]);
       }
     } catch {
       setPinnedEntities([]);
@@ -171,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const isLoadingCols = loadingColumns[entity.name];
 
     return (
-      <div key={entity.name} className="flex flex-col">
+      <div key={`${isPinnedItem ? 'pin_' : 'ent_'}${entity.name}`} className="flex flex-col">
         <div
           onClick={() => onSelectTable(entity.name)}
           className={`h-7 px-2 flex items-center justify-between text-xs cursor-pointer group rounded-lg transition-colors select-none ${
@@ -466,8 +465,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <ChevronRight
                   className={`w-3 h-3 transition-transform ${isEntitiesSectionOpen ? 'rotate-90 text-[#00F566]' : ''}`}
                 />
-                <span>ENTIDADES</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-slate-300 font-mono font-normal">
+                <span>{activeRail === 'pinned' ? 'TABELAS FIXADAS' : 'TABELAS & VIEWS'}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#00F566]/15 text-[#00F566] font-mono font-bold">
                   {displayList.length}
                 </span>
               </div>
@@ -476,10 +475,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {isEntitiesSectionOpen && (
               <div className="mt-1 space-y-0.5">
                 {displayList.length === 0 ? (
-                  <div className="text-center py-6 text-[#64837E] text-xs">
-                    {tables.length === 0
+                  <div className="text-center py-6 text-[#64837E] text-xs px-3">
+                    {activeRail === 'pinned'
+                      ? 'Nenhuma tabela fixada. No Explorador, clique na estrela ao lado de uma tabela para fixar aqui.'
+                      : tables.length === 0
                       ? 'Nenhuma tabela ou conexão ativa.'
-                      : 'Nenhuma entidade encontrada no filtro.'}
+                      : 'Nenhuma entidade encontrada com o filtro atual.'}
                   </div>
                 ) : hasMultipleSchemas ? (
                   schemasPresent.map(schema => {

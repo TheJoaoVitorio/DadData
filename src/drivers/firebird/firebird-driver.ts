@@ -132,12 +132,14 @@ export class FirebirdDriver implements DatabaseDriver {
 
     const sql = `
       SELECT 
-        TRIM(RDB$RELATION_NAME) AS TABLE_NAME,
-        RDB$VIEW_SOURCE AS IS_VIEW
+        RDB$RELATION_NAME AS TABLE_NAME,
+        CASE WHEN RDB$VIEW_SOURCE IS NOT NULL THEN 1 ELSE 0 END AS IS_VIEW
       FROM RDB$RELATIONS
       WHERE (RDB$SYSTEM_FLAG = 0 OR RDB$SYSTEM_FLAG IS NULL)
+        AND RDB$RELATION_NAME NOT LIKE 'RDB$%'
         AND RDB$RELATION_NAME NOT LIKE 'MON$%'
         AND RDB$RELATION_NAME NOT LIKE 'IBE$%'
+        AND RDB$RELATION_NAME NOT LIKE 'SEC$%'
       ORDER BY 1
     `;
 
@@ -145,11 +147,21 @@ export class FirebirdDriver implements DatabaseDriver {
       this.db.query(sql, (err: any, rows: any[]) => {
         if (err) return reject(new Error(`Erro ao listar tabelas do Firebird: ${err.message}`));
 
-        const tables: TableInfo[] = (rows || []).map(r => ({
-          name: r.TABLE_NAME,
-          type: r.IS_VIEW ? 'view' : 'table',
-          schema: 'public'
-        }));
+        const tables: TableInfo[] = (rows || [])
+          .map(r => {
+            const rawName = r.TABLE_NAME ?? r.table_name ?? r.NAME ?? r.name;
+            const name = Buffer.isBuffer(rawName)
+              ? rawName.toString('utf8').trim()
+              : String(rawName || '').trim();
+            const isView = Number(r.IS_VIEW ?? r.is_view) === 1;
+            return {
+              name,
+              type: (isView ? 'view' : 'table') as 'table' | 'view',
+              schema: 'public'
+            };
+          })
+          .filter(t => t.name.length > 0);
+
         resolve(tables);
       });
     });
