@@ -12,6 +12,9 @@ export default defineConfig({
       {
         // Main-Process entry file of the Electron App.
         entry: 'src/main/index.ts',
+        onstart(options) {
+          options.startup();
+        },
         vite: {
           build: {
             outDir: 'dist-electron/main',

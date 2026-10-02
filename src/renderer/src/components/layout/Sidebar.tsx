@@ -12,6 +12,7 @@ import {
   Power
 } from 'lucide-react';
 import { TableInfo, ConnectionConfig } from '@shared/types/database';
+import { DatabaseIcon } from '../icons/DatabaseIcon';
 
 interface SidebarProps {
   activeConnection: ConnectionConfig | null;
@@ -151,21 +152,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div
                 key={c.id}
                 onClick={() => onSwitchConnection(c)}
-                className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all ${
+                className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all flex items-center gap-2.5 ${
                   isActive
                     ? 'border-purple-300 bg-purple-50/50 shadow-sm'
                     : 'border-slate-200/70 hover:border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-semibold text-slate-800 truncate">{c.name}</span>
-                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-700">
-                    {c.type}
-                  </span>
+                <DatabaseIcon type={c.type} className="w-5 h-5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-semibold text-slate-800 truncate">{c.name}</span>
+                    <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-700">
+                      {c.type}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 truncate font-mono">
+                    {c.filePath || `${c.host}:${c.port || ''}`}
+                  </p>
                 </div>
-                <p className="text-[11px] text-slate-500 truncate font-mono">
-                  {c.filePath || `${c.host}:${c.port || ''}`}
-                </p>
               </div>
             );
           })}
@@ -175,8 +179,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Bottom Connection Status / Disconnect Pill */}
       {activeConnection && (
         <div className="pt-3 border-t border-slate-100 mt-2 flex items-center justify-between">
-          <div className="flex items-center gap-2 truncate">
-            <HardDrive className="w-4 h-4 text-purple-600 flex-shrink-0" />
+          <div className="flex items-center gap-2.5 truncate">
+            <DatabaseIcon type={activeConnection.type} className="w-5 h-5 flex-shrink-0" />
             <div className="truncate">
               <p className="text-[11px] font-bold text-slate-800 truncate">{activeConnection.name}</p>
               <p className="text-[10px] text-slate-400 capitalize">{activeConnection.type} Driver</p>

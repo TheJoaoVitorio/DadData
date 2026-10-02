@@ -3,9 +3,9 @@ import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
 import { SqlEditor } from './components/editor/SqlEditor';
 import { DataGrid } from './components/grid/DataGrid';
-import { ConnectionModal } from './components/connections/ConnectionModal';
-import { SampleDatabasesModal } from './components/connections/SampleDatabasesModal';
-import { AddRowModal } from './components/grid/AddRowModal';
+import { ConnectionDrawer } from './components/connections/ConnectionDrawer';
+import { SampleDatabasesDrawer } from './components/connections/SampleDatabasesDrawer';
+import { AddRowDrawer } from './components/grid/AddRowDrawer';
 import { FloatingPromptBar } from './components/layout/FloatingPromptBar';
 
 import {
@@ -15,7 +15,8 @@ import {
   ColumnInfo,
   ExportOptions
 } from '@shared/types/database';
-import { Sparkles, Terminal, Table as TableIcon, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Terminal, Table as TableIcon, X, CheckCircle2, AlertCircle, Monitor } from 'lucide-react';
+import { safeApi, isDesktopElectron } from './services/api-client';
 
 interface TabItem {
   id: string;
@@ -42,10 +43,10 @@ export const App: React.FC = () => {
   const [columnsMeta, setColumnsMeta] = useState<ColumnInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Modals
-  const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
-  const [isSamplesModalOpen, setIsSamplesModalOpen] = useState(false);
-  const [isAddRowModalOpen, setIsAddRowModalOpen] = useState(false);
+  // Drawers
+  const [isConnectionDrawerOpen, setIsConnectionDrawerOpen] = useState(false);
+  const [isSamplesDrawerOpen, setIsSamplesDrawerOpen] = useState(false);
+  const [isAddRowDrawerOpen, setIsAddRowDrawerOpen] = useState(false);
 
   // Toast feedback
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -62,18 +63,15 @@ export const App: React.FC = () => {
 
   const initApp = async () => {
     try {
-      if (window.api) {
-        const samples = await window.api.getSampleDatabases();
-        if (samples && samples.length > 0) {
-          // Auto connect to the first sample (DBF or SQLite)
-          const firstSample = samples[0];
-          await handleConnect({
-            id: `conn_${firstSample.type}`,
-            name: firstSample.name,
-            type: firstSample.type,
-            filePath: firstSample.filePath
-          });
-        }
+      const samples = await safeApi.getSampleDatabases();
+      if (samples && samples.length > 0) {
+        const firstSample = samples[0];
+        await handleConnect({
+          id: `conn_${firstSample.type}`,
+          name: firstSample.name,
+          type: firstSample.type,
+          filePath: firstSample.filePath
+        });
       }
     } catch (err: any) {
       console.warn('Initial connection notice:', err);
@@ -83,7 +81,7 @@ export const App: React.FC = () => {
   const handleConnect = async (config: ConnectionConfig) => {
     setIsLoading(true);
     try {
-      const res = await window.api.connect(config);
+      const res = await safeApi.connect(config);
       if (res.success) {
         setActiveConnection(config);
         setSavedConnections(prev => {
@@ -92,7 +90,7 @@ export const App: React.FC = () => {
         });
 
         // Load tables
-        const tableList = await window.api.listTables(config.id);
+        const tableList = await safeApi.listTables(config.id);
         setTables(tableList);
 
         if (tableList.length > 0) {
@@ -114,7 +112,7 @@ export const App: React.FC = () => {
   const handleDisconnect = async () => {
     if (!activeConnection) return;
     try {
-      await window.api.disconnect(activeConnection.id);
+      await safeApi.disconnect(activeConnection.id);
       setActiveConnection(null);
       setTables([]);
       setSelectedTable(null);
@@ -129,7 +127,7 @@ export const App: React.FC = () => {
     if (!activeConnection) return;
     setIsLoading(true);
     try {
-      const tableList = await window.api.listTables(activeConnection.id);
+      const tableList = await safeApi.listTables(activeConnection.id);
       setTables(tableList);
       if (selectedTable) {
         await handleSelectTable(selectedTable);
@@ -158,8 +156,8 @@ export const App: React.FC = () => {
 
     try {
       const [meta, data] = await Promise.all([
-        window.api.describeTable(targetConnId, tableName).catch(() => []),
-        window.api.getTableData(targetConnId, tableName)
+        safeApi.describeTable(targetConnId, tableName).catch(() => []),
+        safeApi.getTableData(targetConnId, tableName)
       ]);
       setColumnsMeta(meta);
       setQueryResult(data);
@@ -178,7 +176,7 @@ export const App: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const res = await window.api.executeQuery(activeConnection.id, query);
+      const res = await safeApi.executeQuery(activeConnection.id, query);
       setQueryResult(res);
       showToast(`Consulta executada: ${res.rowCount} registros em ${res.executionTimeMs}ms.`);
     } catch (err: any) {
@@ -191,7 +189,7 @@ export const App: React.FC = () => {
   const handleUpdateRow = async (primaryKey: Record<string, any>, changes: Record<string, any>) => {
     if (!activeConnection || !selectedTable) return;
     try {
-      const res = await window.api.updateRow(activeConnection.id, selectedTable, primaryKey, changes);
+      const res = await safeApi.updateRow(activeConnection.id, selectedTable, primaryKey, changes);
       if (res.success) {
         showToast('Registro atualizado com sucesso (CRUD)!');
         await handleSelectTable(selectedTable);
@@ -206,7 +204,7 @@ export const App: React.FC = () => {
   const handleDeleteRow = async (primaryKey: Record<string, any>) => {
     if (!activeConnection || !selectedTable) return;
     try {
-      const res = await window.api.deleteRow(activeConnection.id, selectedTable, primaryKey);
+      const res = await safeApi.deleteRow(activeConnection.id, selectedTable, primaryKey);
       if (res.success) {
         showToast('Registro excluído com sucesso (CRUD)!');
         await handleSelectTable(selectedTable);
@@ -218,7 +216,7 @@ export const App: React.FC = () => {
 
   const handleAddRow = async (rowData: Record<string, any>) => {
     if (!activeConnection || !selectedTable) return;
-    const res = await window.api.insertRow(activeConnection.id, selectedTable, rowData);
+    const res = await safeApi.insertRow(activeConnection.id, selectedTable, rowData);
     if (res.success) {
       showToast('Novo registro adicionado com sucesso (CRUD)!');
       await handleSelectTable(selectedTable);
@@ -232,7 +230,7 @@ export const App: React.FC = () => {
     }
 
     const defaultFilename = `${selectedTable || 'dados'}_export.${format}`;
-    const targetPath = await window.api.saveFileDialog(defaultFilename, format);
+    const targetPath = await safeApi.saveFileDialog(defaultFilename, format);
     if (!targetPath) return;
 
     try {
@@ -242,7 +240,7 @@ export const App: React.FC = () => {
         targetFilePath: targetPath
       };
 
-      const res = await window.api.exportData(activeConnection.id, options);
+      const res = await safeApi.exportData(activeConnection.id, options);
       if (res.success) {
         showToast(`Exportado com sucesso para ${res.filePath} (${res.rowCount} linhas)!`);
       }
@@ -289,11 +287,26 @@ export const App: React.FC = () => {
         </div>
       )}
 
+      {/* Browser Warning Banner if not running in Desktop Electron */}
+      {!isDesktopElectron && (
+        <div className="bg-amber-500/10 border-b border-amber-200/60 px-4 py-1.5 flex items-center justify-between text-xs text-amber-900 select-none">
+          <div className="flex items-center gap-2">
+            <Monitor className="w-3.5 h-3.5 text-amber-700" />
+            <span>
+              Executando no navegador web. Para ter acesso nativo aos arquivos locais do Windows e Electron, execute: <code className="bg-amber-100 font-mono px-1.5 py-0.5 rounded text-[11px]">npm run dev</code>
+            </span>
+          </div>
+          <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-200 text-amber-800">
+            Modo Navegador (Fallback Ativo)
+          </span>
+        </div>
+      )}
+
       {/* Top Header */}
       <Header
         activeConnection={activeConnection}
-        onOpenNewConnection={() => setIsConnectionModalOpen(true)}
-        onOpenSamples={() => setIsSamplesModalOpen(true)}
+        onOpenNewConnection={() => setIsConnectionDrawerOpen(true)}
+        onOpenSamples={() => setIsSamplesDrawerOpen(true)}
         onRefreshSchema={handleRefreshSchema}
         isLoading={isLoading}
       />
@@ -377,7 +390,7 @@ export const App: React.FC = () => {
               isLoading={isLoading}
               onUpdateRow={handleUpdateRow}
               onDeleteRow={handleDeleteRow}
-              onOpenAddRow={() => setIsAddRowModalOpen(true)}
+              onOpenAddRow={() => setIsAddRowDrawerOpen(true)}
               onExportCsv={() => handleExport('csv')}
               onExportExcel={() => handleExport('xlsx')}
             />
@@ -389,29 +402,29 @@ export const App: React.FC = () => {
       <FloatingPromptBar
         activeConnection={activeConnection}
         onExecuteQuery={handleExecuteQuery}
-        onOpenAddRow={() => setIsAddRowModalOpen(true)}
+        onOpenAddRow={() => setIsAddRowDrawerOpen(true)}
         onExportCsv={() => handleExport('csv')}
         onExportExcel={() => handleExport('xlsx')}
         isLoading={isLoading}
       />
 
-      {/* Modals */}
-      <ConnectionModal
-        isOpen={isConnectionModalOpen}
-        onClose={() => setIsConnectionModalOpen(false)}
+      {/* Drawers (replacing modals) */}
+      <ConnectionDrawer
+        isOpen={isConnectionDrawerOpen}
+        onClose={() => setIsConnectionDrawerOpen(false)}
         onConnect={handleConnect}
       />
 
-      <SampleDatabasesModal
-        isOpen={isSamplesModalOpen}
-        onClose={() => setIsSamplesModalOpen(false)}
+      <SampleDatabasesDrawer
+        isOpen={isSamplesDrawerOpen}
+        onClose={() => setIsSamplesDrawerOpen(false)}
         onConnectSample={handleConnect}
       />
 
       {selectedTable && (
-        <AddRowModal
-          isOpen={isAddRowModalOpen}
-          onClose={() => setIsAddRowModalOpen(false)}
+        <AddRowDrawer
+          isOpen={isAddRowDrawerOpen}
+          onClose={() => setIsAddRowDrawerOpen(false)}
           tableName={selectedTable}
           columns={queryResult?.columns || []}
           columnsMeta={columnsMeta}

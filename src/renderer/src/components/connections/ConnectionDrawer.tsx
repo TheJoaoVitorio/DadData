@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   X,
-  Database,
   FolderOpen,
   FileCheck,
   CheckCircle2,
@@ -11,8 +10,10 @@ import {
   Layers
 } from 'lucide-react';
 import { DatabaseType, ConnectionConfig } from '@shared/types/database';
+import { DatabaseIcon } from '../icons/DatabaseIcon';
+import { safeApi } from '../../services/api-client';
 
-interface ConnectionModalProps {
+interface ConnectionDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onConnect: (config: ConnectionConfig) => Promise<void>;
@@ -22,7 +23,6 @@ interface EngineOption {
   type: DatabaseType;
   label: string;
   category: 'legacy' | 'modern';
-  icon: string;
   defaultPort?: number;
   extensions?: string[];
   description: string;
@@ -30,24 +30,24 @@ interface EngineOption {
 
 const ENGINES: EngineOption[] = [
   // Legacy
-  { type: 'dbf', label: 'dBase / FoxPro', category: 'legacy', icon: '📁', extensions: ['dbf'], description: 'Arquivos .DBF com suporte a pastas ou arquivos individuais' },
-  { type: 'paradox', label: 'Paradox (.DB)', category: 'legacy', icon: '💾', extensions: ['db'], description: 'Formato clássico Borland/Corel 3.5 a 7.0 para Delphi/ERP' },
-  { type: 'access', label: 'Microsoft Access', category: 'legacy', icon: '📑', extensions: ['mdb', 'accdb'], description: 'Banco de dados Jet / ACE Engine (.MDB e .ACCDB)' },
-  { type: 'hfsql', label: 'HFSQL (.FIC)', category: 'legacy', icon: '📦', extensions: ['fic'], description: 'PC SOFT HyperFileSQL Classic para WinDev / WebDev' },
-  { type: 'nexusdb', label: 'NexusDB (.NX1)', category: 'legacy', icon: '🏛️', extensions: ['nx1'], description: 'Motor de banco de dados Delphi NexusDB v4' },
-  { type: 'firebird', label: 'Firebird (.FDB)', category: 'legacy', icon: '🔥', defaultPort: 3050, extensions: ['fdb'], description: 'Banco relacional Firebird SQL (Dialeto 1 e 3)' },
+  { type: 'dbf', label: 'dBase / FoxPro (.DBF)', category: 'legacy', extensions: ['dbf'], description: 'Tabelas isoladas ou diretório de arquivos .DBF' },
+  { type: 'paradox', label: 'Paradox (.DB)', category: 'legacy', extensions: ['db'], description: 'Formato clássico Borland/Corel Paradox 3.5 a 7.0' },
+  { type: 'access', label: 'Microsoft Access', category: 'legacy', extensions: ['mdb', 'accdb'], description: 'Banco de dados Jet / ACE Engine (.MDB e .ACCDB)' },
+  { type: 'hfsql', label: 'HFSQL (.FIC)', category: 'legacy', extensions: ['fic'], description: 'PC SOFT HyperFileSQL Classic para WinDev' },
+  { type: 'nexusdb', label: 'NexusDB (.NX1)', category: 'legacy', extensions: ['nx1'], description: 'Motor de banco de dados Delphi NexusDB v4' },
+  { type: 'firebird', label: 'Firebird (.FDB)', category: 'legacy', defaultPort: 3050, extensions: ['fdb'], description: 'Banco relacional Firebird SQL (Dialeto 1 e 3)' },
 
   // Modern
-  { type: 'sqlite', label: 'SQLite 3', category: 'modern', icon: '⚡', extensions: ['sqlite', 'db', 'sqlite3'], description: 'Arquivo local autossuficiente e ultrarrápido' },
-  { type: 'postgres', label: 'PostgreSQL', category: 'modern', icon: '🐘', defaultPort: 5432, description: 'Postgres v9 a v17 com suporte a múltiplos schemas' },
-  { type: 'mysql', label: 'MySQL / MariaDB', category: 'modern', icon: '🐬', defaultPort: 3306, description: 'MySQL 5.5 a 8.4 e MariaDB com autenticação nativa' },
-  { type: 'mssql', label: 'SQL Server', category: 'modern', icon: '🏢', defaultPort: 1433, description: 'Microsoft SQL Server com T-SQL' },
-  { type: 'mongodb', label: 'MongoDB', category: 'modern', icon: '🍃', defaultPort: 27017, description: 'Banco de documentos NoSQL e coleções BSON' }
+  { type: 'sqlite', label: 'SQLite 3', category: 'modern', extensions: ['sqlite', 'db', 'sqlite3'], description: 'Arquivo local em disco ou memória' },
+  { type: 'postgres', label: 'PostgreSQL', category: 'modern', defaultPort: 5432, description: 'Postgres v9 a v17 com múltiplos schemas' },
+  { type: 'mysql', label: 'MySQL / MariaDB', category: 'modern', defaultPort: 3306, description: 'MySQL 5.5 a 8.4 e MariaDB' },
+  { type: 'mssql', label: 'SQL Server', category: 'modern', defaultPort: 1433, description: 'Microsoft SQL Server (T-SQL)' },
+  { type: 'mongodb', label: 'MongoDB', category: 'modern', defaultPort: 27017, description: 'Banco NoSQL de documentos BSON/JSON' }
 ];
 
-export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClose, onConnect }) => {
+export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onClose, onConnect }) => {
   const [selectedEngine, setSelectedEngine] = useState<EngineOption>(ENGINES[0]);
-  const [connName, setConnName] = useState('Minha Conexão DBF');
+  const [connName, setConnName] = useState('Conexão DBF');
   const [filePath, setFilePath] = useState('');
   const [host, setHost] = useState('localhost');
   const [port, setPort] = useState<number>(ENGINES[0].defaultPort || 5432);
@@ -77,25 +77,25 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClos
       const filters = selectedEngine.extensions
         ? [{ name: selectedEngine.label, extensions: selectedEngine.extensions }, { name: 'Todos os Arquivos', extensions: ['*'] }]
         : undefined;
-      const file = await window.api.openFileDialog(filters);
+      const file = await safeApi.openFileDialog(filters);
       if (file) {
         setFilePath(file);
         setTestResult(null);
       }
     } catch (err: any) {
-      alert(`Erro ao abrir diálogo: ${err.message}`);
+      alert(`Erro ao selecionar arquivo: ${err.message}`);
     }
   };
 
   const handleBrowseDir = async () => {
     try {
-      const dir = await window.api.openDirectoryDialog();
+      const dir = await safeApi.openDirectoryDialog();
       if (dir) {
         setFilePath(dir);
         setTestResult(null);
       }
     } catch (err: any) {
-      alert(`Erro ao abrir diálogo de pasta: ${err.message}`);
+      alert(`Erro ao selecionar pasta: ${err.message}`);
     }
   };
 
@@ -118,7 +118,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClos
     setTestResult(null);
     try {
       const config = buildConfig();
-      const res = await window.api.testConnection(config);
+      const res = await safeApi.testConnection(config);
       setTestResult({
         success: res.success,
         message: res.message || (res.success ? 'Conexão validada com sucesso!' : 'Falha na conexão')
@@ -155,36 +155,48 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClos
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl p-6 shadow-2xl border border-slate-200/80 w-full max-w-3xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">Nova Conexão</h3>
-            <p className="text-xs text-slate-500">Selecione o motor de banco de dados e configure os parâmetros.</p>
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm transition-opacity"
+      />
+
+      {/* Drawer Panel Sliding From Right */}
+      <aside className="fixed inset-y-0 right-0 z-50 w-[540px] max-w-full bg-white shadow-2xl flex flex-col border-l border-slate-200/80 animate-in slide-in-from-right duration-300">
+        {/* Drawer Header */}
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-2xl bg-purple-50 border border-purple-100">
+              <DatabaseIcon type={selectedEngine.type} className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Nova Conexão</h3>
+              <p className="text-xs text-slate-500">Escolha o banco e configure os parâmetros de acesso</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+            className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Engine Category Pills */}
-        <div className="flex gap-2 pt-3 pb-2 select-none">
+        {/* Category Filter Pills */}
+        <div className="px-5 pt-3 pb-2 flex gap-1.5 select-none bg-slate-50/50 border-b border-slate-100">
           {[
-            { id: 'all', label: 'Todos os Motores' },
-            { id: 'legacy', label: '💾 Bancos Legados & Arquivos' },
-            { id: 'modern', label: '⚡ Modernos & Servidores' }
+            { id: 'all', label: 'Todos os Bancos' },
+            { id: 'legacy', label: 'Bancos Legados & ERP' },
+            { id: 'modern', label: 'Modernos & Servidores' }
           ].map(cat => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id as any)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                 activeCategory === cat.id
                   ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-white text-slate-600 border border-slate-200/70 hover:bg-slate-100'
               }`}
             >
               {cat.label}
@@ -192,64 +204,69 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClos
           ))}
         </div>
 
-        {/* Engine Grid Selector */}
-        <div className="grid grid-cols-3 gap-2 py-2 max-h-36 overflow-y-auto pr-1">
-          {filteredEngines.map(eng => {
-            const isSelected = selectedEngine.type === eng.type;
-            return (
-              <button
-                key={eng.type}
-                type="button"
-                onClick={() => handleSelectEngine(eng)}
-                className={`p-2.5 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
-                  isSelected
-                    ? 'border-purple-500 bg-purple-50/50 shadow-sm ring-2 ring-purple-200'
-                    : 'border-slate-200/80 hover:border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                <span className="text-xl">{eng.icon}</span>
-                <div className="truncate">
-                  <div className="text-xs font-bold text-slate-900 truncate">{eng.label}</div>
-                  <div className="text-[10px] text-slate-500 truncate">{eng.description}</div>
-                </div>
-              </button>
-            );
-          })}
+        {/* Database Engine Selector Grid with Official SVGs */}
+        <div className="px-5 py-3 border-b border-slate-100">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+            Motor de Banco de Dados
+          </label>
+          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+            {filteredEngines.map(eng => {
+              const isSelected = selectedEngine.type === eng.type;
+              return (
+                <button
+                  key={eng.type}
+                  type="button"
+                  onClick={() => handleSelectEngine(eng)}
+                  className={`p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                    isSelected
+                      ? 'border-purple-500 bg-purple-50/50 shadow-sm ring-2 ring-purple-200'
+                      : 'border-slate-200/70 hover:border-slate-300 hover:bg-slate-50/80'
+                  }`}
+                >
+                  <DatabaseIcon type={eng.type} className="w-7 h-7 flex-shrink-0" />
+                  <div className="truncate">
+                    <div className="text-xs font-bold text-slate-900 truncate">{eng.label}</div>
+                    <div className="text-[10px] text-slate-500 truncate">{eng.description}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Form Fields */}
-        <form onSubmit={handleConnectSubmit} className="flex-1 overflow-y-auto py-3 space-y-3 pr-1 border-t border-slate-100 mt-2">
+        <form onSubmit={handleConnectSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Connection Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Nome da Conexão</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Identificação da Conexão</label>
             <input
               type="text"
               required
               value={connName}
               onChange={e => setConnName(e.target.value)}
-              className="w-full px-3.5 py-2 bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 focus:outline-none"
+              className="w-full px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 focus:outline-none transition-all"
             />
           </div>
 
           {isFileBased ? (
-            /* File Based Inputs */
-            <div>
+            /* File Based Configuration */
+            <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Caminho do Arquivo ou Pasta ({selectedEngine.label})
+                Caminho do Arquivo ou Diretório
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   required
-                  placeholder="Ex: C:\Dados\CLIENTES.DBF ou pasta com arquivos"
+                  placeholder="Ex: C:\Sistemas\CLIENTES.DBF ou pasta"
                   value={filePath}
                   onChange={e => setFilePath(e.target.value)}
-                  className="flex-1 px-3.5 py-2 bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 font-mono focus:outline-none"
+                  className="flex-1 px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 font-mono focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleBrowseFile}
-                  className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm"
+                  className="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm"
                 >
                   <FolderOpen className="w-3.5 h-3.5 text-purple-600" />
                   <span>Arquivo</span>
@@ -258,20 +275,23 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClos
                   <button
                     type="button"
                     onClick={handleBrowseDir}
-                    className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm"
+                    className="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm"
                   >
-                    <FolderOpen className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Pasta DBFs</span>
+                    <FolderOpen className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Pasta</span>
                   </button>
                 )}
               </div>
+              <p className="text-[11px] text-slate-400">
+                Selecione o arquivo de dados ou informe a pasta onde se encontram as tabelas.
+              </p>
             </div>
           ) : (
-            /* Server Based Inputs */
+            /* Server Based Configuration */
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Host / Servidor</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Host / IP</label>
                   <input
                     type="text"
                     required
@@ -291,12 +311,12 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClos
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Database</label>
                   <input
                     type="text"
-                    placeholder="database_name"
+                    placeholder="nome_do_banco"
                     value={database}
                     onChange={e => setDatabase(e.target.value)}
                     className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
@@ -326,7 +346,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClos
             </div>
           )}
 
-          {/* Test Feedback Result */}
+          {/* Test Status Banner */}
           {testResult && (
             <div
               className={`p-3 rounded-2xl text-xs flex items-center gap-2 border ${
@@ -343,38 +363,38 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({ isOpen, onClos
               <span className="truncate">{testResult.message}</span>
             </div>
           )}
+        </form>
 
-          {/* Footer Actions */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+        {/* Drawer Actions Footer */}
+        <div className="p-5 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={isTesting}
+            className="px-4 py-2 rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            <FileCheck className="w-3.5 h-3.5 text-slate-500" />
+            <span>{isTesting ? 'Testando...' : 'Testar Conexão'}</span>
+          </button>
+
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleTest}
-              disabled={isTesting}
-              className="px-4 py-2 rounded-full border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+              onClick={onClose}
+              className="px-4 py-2 rounded-full border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
             >
-              <FileCheck className="w-3.5 h-3.5 text-slate-500" />
-              <span>{isTesting ? 'Testando...' : 'Testar Conexão'}</span>
+              Cancelar
             </button>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-full border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={isConnecting}
-                className="px-6 py-2 rounded-full bg-[#121217] hover:bg-black text-white text-xs font-semibold flex items-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-50"
-              >
-                <span>{isConnecting ? 'Conectando...' : 'Conectar Agora'}</span>
-              </button>
-            </div>
+            <button
+              onClick={handleConnectSubmit}
+              disabled={isConnecting}
+              className="px-6 py-2.5 rounded-full bg-[#121217] hover:bg-black text-white text-xs font-semibold flex items-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-50"
+            >
+              <span>{isConnecting ? 'Conectando...' : 'Conectar Banco'}</span>
+            </button>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </aside>
+    </>
   );
 };

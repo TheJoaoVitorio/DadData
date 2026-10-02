@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, Terminal, FileSpreadsheet, Download, Plus, ArrowRight } from 'lucide-react';
 import { ConnectionConfig } from '@shared/types/database';
+import { DatabaseIcon } from '../icons/DatabaseIcon';
 
 interface FloatingPromptBarProps {
   activeConnection: ConnectionConfig | null;
@@ -92,9 +93,9 @@ export const FloatingPromptBar: React.FC<FloatingPromptBarProps> = ({
 
           {/* Engine Pill Badge */}
           {activeConnection && (
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100/90 text-slate-600 text-[11px] font-mono select-none">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>{activeConnection.type.toUpperCase()}</span>
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100/90 text-slate-700 text-[11px] font-mono select-none">
+              <DatabaseIcon type={activeConnection.type} className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="font-semibold uppercase">{activeConnection.type}</span>
             </div>
           )}
 

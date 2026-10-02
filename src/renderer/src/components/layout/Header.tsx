@@ -1,6 +1,7 @@
 import React from 'react';
 import { Database, Plus, Sparkles, FolderArchive, Layers, RefreshCw } from 'lucide-react';
 import { ConnectionConfig } from '@shared/types/database';
+import { DatabaseIcon } from '../icons/DatabaseIcon';
 
 interface HeaderProps {
   activeConnection: ConnectionConfig | null;
@@ -54,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Active Database Badge Pill */}
       {activeConnection && (
         <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/90 backdrop-blur-md shadow-sm border border-slate-200/80">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <DatabaseIcon type={activeConnection.type} className="w-4 h-4 flex-shrink-0" />
           <span className="text-xs font-semibold text-slate-800">{activeConnection.name}</span>
           <span className="text-[10px] uppercase px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600">
             {activeConnection.type}
