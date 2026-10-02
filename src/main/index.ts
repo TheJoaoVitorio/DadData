@@ -1,6 +1,10 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { registerIpcHandlers } from './ipc/register-ipc';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
