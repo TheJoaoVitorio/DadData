@@ -178,6 +178,33 @@ describe('DadData Database Drivers & Export Suite', () => {
 
       await driverManager.disconnect(connId);
     });
+
+    it('should parse real production Paradox table with correct field names when available', async () => {
+      const realFile = 'C:/Users/Delphi - João/Downloads/wsicbck/TabEst1.db';
+      if (!fs.existsSync(realFile)) return;
+
+      const conn = await driverManager.connect({
+        id: 'test-real-paradox',
+        name: 'TabEst1 Real',
+        type: 'paradox',
+        filePath: realFile
+      });
+      expect(conn.success).toBe(true);
+
+      const columns = await driverManager.describeTable('test-real-paradox', 'TabEst1');
+      expect(columns.length).toBe(38);
+      expect(columns[0].name).toBe('Controle');
+      expect(columns[1].name).toBe('Codigo');
+      expect(columns[3].name).toBe('Produto');
+
+      const queryRes = await driverManager.executeQuery('test-real-paradox', 'SELECT * FROM TabEst1');
+      expect(queryRes.rowCount).toBe(1942);
+      expect(queryRes.rows[0].Controle).toBe(1);
+      expect(queryRes.rows[0].Codigo).toBe('7897770830059');
+      expect(queryRes.rows[0].Produto).toBe('MAURICEA COQUINHO 330G');
+
+      await driverManager.disconnect('test-real-paradox');
+    });
   });
 
   describe('4. Legacy Microsoft Access (.MDB) Driver', () => {
