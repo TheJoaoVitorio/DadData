@@ -33,6 +33,7 @@
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
     "lucide-react": "^1.16.0",
+    "node-firebird": "^2.18.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sql.js": "^1.12.0",

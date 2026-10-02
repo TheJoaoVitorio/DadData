@@ -69,6 +69,12 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
     setSelectedEngine(eng);
     setConnName(`Conexão ${eng.label}`);
     if (eng.defaultPort) setPort(eng.defaultPort);
+    if (eng.type === 'firebird') {
+      setUser('SYSDBA');
+      setPassword('masterkey');
+      setHost('127.0.0.1');
+      setPort(3050);
+    }
     setTestResult(null);
   };
 
@@ -80,6 +86,9 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
       const file = await safeApi.openFileDialog(filters);
       if (file) {
         setFilePath(file);
+        if (selectedEngine.type === 'firebird') {
+          setDatabase(file);
+        }
         setTestResult(null);
       }
     } catch (err: any) {
@@ -103,13 +112,13 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
     id: `conn_${Date.now()}`,
     name: connName,
     type: selectedEngine.type,
-    filePath: isFileBased ? filePath : undefined,
+    filePath: filePath || (selectedEngine.type === 'firebird' ? database : undefined),
     directoryPath: isFileBased && filePath && !filePath.includes('.') ? filePath : undefined,
-    host: !isFileBased ? host : undefined,
-    port: !isFileBased ? port : undefined,
-    database: !isFileBased ? database : undefined,
-    user: !isFileBased ? user : undefined,
-    password: !isFileBased ? password : undefined,
+    host: selectedEngine.type === 'firebird' ? (host || '127.0.0.1') : (!isFileBased ? host : undefined),
+    port: selectedEngine.type === 'firebird' ? (port || 3050) : (!isFileBased ? port : undefined),
+    database: filePath || database || undefined,
+    user: selectedEngine.type === 'firebird' ? (user || 'SYSDBA') : (!isFileBased ? user : undefined),
+    password: selectedEngine.type === 'firebird' ? (password || 'masterkey') : (!isFileBased ? password : undefined),
     ssl: !isFileBased ? ssl : undefined
   });
 
@@ -248,7 +257,85 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
             />
           </div>
 
-          {isFileBased ? (
+          {selectedEngine.type === 'firebird' ? (
+            /* Firebird Configuration: File (.FDB) + Host / Port / User / Password */
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Arquivo do Banco Firebird (.FDB / .GDB)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: C:\Sistemas\DADOS.FDB"
+                    value={filePath}
+                    onChange={e => {
+                      setFilePath(e.target.value);
+                      setDatabase(e.target.value);
+                    }}
+                    className="flex-1 px-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-xl text-xs text-slate-800 font-mono focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBrowseFile}
+                    className="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Arquivo</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Selecione o arquivo do banco no seu computador (.FDB).
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Host / Servidor</label>
+                  <input
+                    type="text"
+                    required
+                    value={host}
+                    onChange={e => setHost(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Porta</label>
+                  <input
+                    type="number"
+                    value={port}
+                    onChange={e => setPort(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Usuário</label>
+                  <input
+                    type="text"
+                    required
+                    value={user}
+                    onChange={e => setUser(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Senha</label>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : isFileBased ? (
             /* File Based Configuration */
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1">

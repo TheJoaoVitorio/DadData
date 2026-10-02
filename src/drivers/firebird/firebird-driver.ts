@@ -1,3 +1,5 @@
+import Firebird from 'node-firebird';
+import { execSync } from 'child_process';
 import { DatabaseDriver } from '../driver-interface';
 import {
   ConnectionConfig,
@@ -12,97 +14,329 @@ import {
 export class FirebirdDriver implements DatabaseDriver {
   readonly type = 'firebird';
   private config: ConnectionConfig | null = null;
+  private db: any = null;
   private isConnected = false;
-  private mockTables: Map<string, { columns: ColumnInfo[]; rows: Record<string, any>[] }> = new Map();
+
+  private getWindowsShortPath(fullPath: string): string {
+    if (process.platform !== 'win32') return fullPath;
+    if (!fullPath || !/[^\x00-\x7F]|\s/.test(fullPath)) return fullPath;
+    try {
+      const escaped = fullPath.replace(/"/g, '');
+      const stdout = execSync(`cmd.exe /c "for %I in ("${escaped}") do @echo %~sI"`, {
+        encoding: 'utf8',
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore']
+      }).trim();
+      if (stdout && stdout.length > 0 && stdout !== '%~sI') {
+        return stdout;
+      }
+    } catch {
+      // Fallback to original path
+    }
+    return fullPath;
+  }
 
   async connect(config: ConnectionConfig): Promise<ConnectionResult> {
     this.config = config;
-    this.isConnected = true;
-    this.initMockSchema();
 
-    return {
-      success: true,
-      connectionId: config.id,
-      databaseName: config.database || 'DATABASE.FDB',
-      serverVersion: 'Firebird 4.0.4.3010-0 (SuperServer)'
+    if (this.db) {
+      await this.disconnect();
+    }
+
+    const rawPath = config.filePath || config.database || '';
+    if (!rawPath) {
+      throw new Error('Informe o caminho do arquivo de banco de dados Firebird (.FDB).');
+    }
+
+    const dbPath = this.getWindowsShortPath(rawPath);
+
+    const options: any = {
+      host: config.host || '127.0.0.1',
+      port: config.port || 3050,
+      database: dbPath,
+      user: config.user || 'SYSDBA',
+      password: config.password || 'masterkey',
+      lowercase_keys: false,
+      role: config.options?.role || undefined,
+      pageSize: 4096
     };
+
+    return new Promise((resolve, reject) => {
+      Firebird.attach(options, (err: any, db: any) => {
+        if (err) {
+          return reject(new Error(`Falha ao conectar no Firebird (${options.host}:${options.port}): ${err.message}`));
+        }
+        this.db = db;
+        this.isConnected = true;
+        const dbName = rawPath.split(/[\\/]/).pop() || 'DATABASE.FDB';
+        resolve({
+          success: true,
+          connectionId: config.id,
+          databaseName: dbName,
+          serverVersion: `Firebird Server (${options.host}:${options.port})`
+        });
+      });
+    });
   }
 
   async disconnect(): Promise<void> {
-    this.isConnected = false;
-    this.mockTables.clear();
+    if (this.db) {
+      await new Promise<void>((resolve) => {
+        this.db.detach(() => {
+          this.db = null;
+          this.isConnected = false;
+          resolve();
+        });
+      });
+    }
     this.config = null;
   }
 
   async testConnection(config: ConnectionConfig): Promise<{ success: boolean; message?: string }> {
-    return { success: true, message: `Connected to Firebird Server on ${config.host || 'localhost'}:3050` };
+    const rawPath = config.filePath || config.database || '';
+    if (!rawPath) {
+      return { success: false, message: 'Informe o caminho do arquivo do banco Firebird (.FDB).' };
+    }
+
+    const dbPath = this.getWindowsShortPath(rawPath);
+
+    const options: any = {
+      host: config.host || '127.0.0.1',
+      port: config.port || 3050,
+      database: dbPath,
+      user: config.user || 'SYSDBA',
+      password: config.password || 'masterkey',
+      lowercase_keys: false
+    };
+
+    return new Promise((resolve) => {
+      Firebird.attach(options, (err: any, db: any) => {
+        if (err) {
+          return resolve({
+            success: false,
+            message: `Erro ao conectar no Firebird: ${err.message}`
+          });
+        }
+        db.detach(() => {
+          resolve({
+            success: true,
+            message: `Conexão validada com sucesso no Firebird em ${options.host}:${options.port}!`
+          });
+        });
+      });
+    });
   }
 
   async listTables(): Promise<TableInfo[]> {
-    if (!this.isConnected) throw new Error('Firebird driver not connected');
+    if (!this.db) throw new Error('Firebird não conectado.');
 
-    const tables: TableInfo[] = [];
-    for (const [name, data] of this.mockTables.entries()) {
-      tables.push({
-        name,
-        type: 'table',
-        rowCount: data.rows.length
+    const sql = `
+      SELECT 
+        TRIM(RDB$RELATION_NAME) AS TABLE_NAME,
+        RDB$VIEW_SOURCE AS IS_VIEW
+      FROM RDB$RELATIONS
+      WHERE (RDB$SYSTEM_FLAG = 0 OR RDB$SYSTEM_FLAG IS NULL)
+        AND RDB$RELATION_NAME NOT LIKE 'MON$%'
+        AND RDB$RELATION_NAME NOT LIKE 'IBE$%'
+      ORDER BY 1
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.query(sql, (err: any, rows: any[]) => {
+        if (err) return reject(new Error(`Erro ao listar tabelas do Firebird: ${err.message}`));
+
+        const tables: TableInfo[] = (rows || []).map(r => ({
+          name: r.TABLE_NAME,
+          type: r.IS_VIEW ? 'view' : 'table',
+          schema: 'public'
+        }));
+        resolve(tables);
       });
+    });
+  }
+
+  private mapType(fieldType: number, length: number, scale: number, subType: number, precision?: number): string {
+    switch (fieldType) {
+      case 7:
+        return scale < 0 ? `NUMERIC(${precision || 4},${-scale})` : 'SMALLINT';
+      case 8:
+        return scale < 0 ? `NUMERIC(${precision || 9},${-scale})` : 'INTEGER';
+      case 10:
+        return 'FLOAT';
+      case 12:
+        return 'DATE';
+      case 13:
+        return 'TIME';
+      case 14:
+        return `CHAR(${length})`;
+      case 16:
+        return scale < 0 ? `NUMERIC(${precision || 15},${-scale})` : 'BIGINT';
+      case 23:
+        return 'BOOLEAN';
+      case 27:
+        return 'DOUBLE PRECISION';
+      case 35:
+        return 'TIMESTAMP';
+      case 37:
+        return `VARCHAR(${length})`;
+      case 261:
+        return subType === 1 ? 'BLOB SUB_TYPE TEXT' : 'BLOB';
+      default:
+        return `TYPE_${fieldType}`;
     }
-    return tables;
   }
 
   async describeTable(tableName: string): Promise<ColumnInfo[]> {
-    const table = this.mockTables.get(tableName);
-    if (!table) throw new Error(`Table ${tableName} not found`);
-    return table.columns;
+    if (!this.db) throw new Error('Firebird não conectado.');
+
+    const cleanTableName = tableName.trim().toUpperCase();
+
+    const colSql = `
+      SELECT 
+        TRIM(rf.RDB$FIELD_NAME) AS FIELD_NAME,
+        f.RDB$FIELD_TYPE AS FIELD_TYPE,
+        f.RDB$FIELD_LENGTH AS FIELD_LENGTH,
+        f.RDB$FIELD_SCALE AS FIELD_SCALE,
+        f.RDB$FIELD_SUB_TYPE AS FIELD_SUB_TYPE,
+        f.RDB$FIELD_PRECISION AS FIELD_PRECISION,
+        rf.RDB$NULL_FLAG AS NULL_FLAG
+      FROM RDB$RELATION_FIELDS rf
+      JOIN RDB$FIELDS f ON rf.RDB$FIELD_SOURCE = f.RDB$FIELD_NAME
+      WHERE TRIM(rf.RDB$RELATION_NAME) = ?
+      ORDER BY rf.RDB$FIELD_POSITION
+    `;
+
+    const pkSql = `
+      SELECT TRIM(s.RDB$FIELD_NAME) AS PK_FIELD
+      FROM RDB$RELATION_CONSTRAINTS rc
+      JOIN RDB$INDEX_SEGMENTS s ON rc.RDB$INDEX_NAME = s.RDB$INDEX_NAME
+      WHERE TRIM(rc.RDB$RELATION_NAME) = ? AND rc.RDB$CONSTRAINT_TYPE = 'PRIMARY KEY'
+    `;
+
+    const [cols, pks] = await Promise.all([
+      new Promise<any[]>((resolve, reject) => {
+        this.db.query(colSql, [cleanTableName], (err: any, res: any[]) => {
+          if (err) return reject(err);
+          resolve(res || []);
+        });
+      }),
+      new Promise<string[]>((resolve) => {
+        this.db.query(pkSql, [cleanTableName], (err: any, res: any[]) => {
+          if (err || !res) return resolve([]);
+          resolve(res.map(r => r.PK_FIELD));
+        });
+      })
+    ]);
+
+    const pkSet = new Set(pks);
+
+    return cols.map(c => ({
+      name: c.FIELD_NAME,
+      type: this.mapType(c.FIELD_TYPE, c.FIELD_LENGTH, c.FIELD_SCALE, c.FIELD_SUB_TYPE, c.FIELD_PRECISION),
+      nullable: c.NULL_FLAG !== 1,
+      isPrimaryKey: pkSet.has(c.FIELD_NAME)
+    }));
   }
 
-  async executeQuery(query: string, _options?: QueryOptions): Promise<QueryResult> {
+  private async resolveRowValues(row: Record<string, any>): Promise<Record<string, any>> {
+    const result: Record<string, any> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (typeof v === 'function') {
+        try {
+          result[k] = await new Promise<string>((resolve) => {
+            v((err: any, _name: any, emitter: any) => {
+              if (err) return resolve('[BLOB]');
+              let data = '';
+              emitter.on('data', (chunk: any) => {
+                data += chunk.toString();
+              });
+              emitter.on('end', () => {
+                resolve(data);
+              });
+              emitter.on('error', () => {
+                resolve('[BLOB]');
+              });
+            });
+          });
+        } catch {
+          result[k] = '[BLOB]';
+        }
+      } else if (Buffer.isBuffer(v)) {
+        result[k] = v.toString('utf8');
+      } else if (v instanceof Date) {
+        result[k] = v.toISOString();
+      } else {
+        result[k] = v;
+      }
+    }
+    return result;
+  }
+
+  private detectStatementType(sql: string): 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'CREATE' | 'DROP' | 'OTHER' {
+    const firstWord = sql.trim().split(/\s+/)[0]?.toUpperCase();
+    if (firstWord === 'SELECT') return 'SELECT';
+    if (firstWord === 'INSERT') return 'INSERT';
+    if (firstWord === 'UPDATE') return 'UPDATE';
+    if (firstWord === 'DELETE') return 'DELETE';
+    if (firstWord === 'CREATE') return 'CREATE';
+    if (firstWord === 'DROP') return 'DROP';
+    return 'OTHER';
+  }
+
+  async executeQuery(query: string, options?: QueryOptions): Promise<QueryResult> {
+    if (!this.db) throw new Error('Firebird não conectado.');
+
     const startTime = performance.now();
-    const clean = query.trim();
+    const cleanQuery = query.trim();
 
-    const match = clean.match(/FROM\s+["`]?([a-zA-Z0-9_.-]+)["`]?/i);
-    let tableName = '';
+    return new Promise((resolve, reject) => {
+      this.db.query(cleanQuery, options?.params || [], async (err: any, rows: any[]) => {
+        if (err) {
+          return reject(new Error(`Erro SQL Firebird: ${err.message}`));
+        }
 
-    if (match) {
-      tableName = match[1];
-    } else {
-      const keys = Array.from(this.mockTables.keys());
-      if (keys.length > 0) tableName = keys[0];
-    }
+        const executionTimeMs = Math.round(performance.now() - startTime);
 
-    const table = this.mockTables.get(tableName);
-    if (!table) {
-      return {
-        columns: ['RDB$STATUS'],
-        rows: [{ 'RDB$STATUS': 'OK' }],
-        rowCount: 1,
-        executionTimeMs: Math.round(performance.now() - startTime),
-        statementType: 'OTHER'
-      };
-    }
+        if (!Array.isArray(rows) || rows.length === 0) {
+          return resolve({
+            columns: [],
+            rows: [],
+            rowCount: 0,
+            executionTimeMs,
+            statementType: this.detectStatementType(cleanQuery)
+          });
+        }
 
-    const rows = [...table.rows];
-    const executionTimeMs = Math.round(performance.now() - startTime);
+        const formattedRows: Record<string, any>[] = [];
+        for (const row of rows) {
+          const resolvedRow = await this.resolveRowValues(row);
+          formattedRows.push(resolvedRow);
+        }
 
-    return {
-      columns: table.columns.map(c => c.name),
-      rows,
-      rowCount: rows.length,
-      executionTimeMs,
-      statementType: 'SELECT'
-    };
+        const columns = Object.keys(formattedRows[0] || {});
+
+        resolve({
+          columns,
+          rows: formattedRows,
+          rowCount: formattedRows.length,
+          executionTimeMs,
+          statementType: this.detectStatementType(cleanQuery)
+        });
+      });
+    });
   }
 
   async insertRow(tableName: string, data: Record<string, any>): Promise<MutationResult> {
-    const table = this.mockTables.get(tableName);
-    if (!table) throw new Error(`Table ${tableName} not found`);
+    const keys = Object.keys(data);
+    if (keys.length === 0) return { success: false, affectedRows: 0, error: 'No data provided' };
 
-    const newId = table.rows.length + 1;
-    table.rows.push({ COD_ITEM: newId, ...data });
+    const quotedCols = keys.map(k => `"${k}"`).join(', ');
+    const placeholders = keys.map(() => '?').join(', ');
+    const values = keys.map(k => data[k]);
 
-    return { success: true, affectedRows: 1, insertedId: newId };
+    const sql = `INSERT INTO "${tableName}" (${quotedCols}) VALUES (${placeholders})`;
+    await this.executeQuery(sql, { params: values });
+    return { success: true, affectedRows: 1 };
   }
 
   async updateRow(
@@ -110,52 +344,29 @@ export class FirebirdDriver implements DatabaseDriver {
     primaryKey: Record<string, any>,
     changes: Record<string, any>
   ): Promise<MutationResult> {
-    const table = this.mockTables.get(tableName);
-    if (!table) throw new Error(`Table ${tableName} not found`);
+    const setKeys = Object.keys(changes);
+    if (setKeys.length === 0) return { success: false, affectedRows: 0, error: 'No changes provided' };
 
-    const pkKey = Object.keys(primaryKey)[0];
-    const pkVal = primaryKey[pkKey];
+    const setClauses = setKeys.map(k => `"${k}" = ?`).join(', ');
+    const pkKeys = Object.keys(primaryKey);
+    const whereClauses = pkKeys.map(k => `"${k}" = ?`).join(' AND ');
 
-    const row = table.rows.find(r => String(r[pkKey]) === String(pkVal));
-    if (row) {
-      Object.assign(row, changes);
-      return { success: true, affectedRows: 1 };
-    }
-    return { success: false, affectedRows: 0, error: 'Record not found' };
+    const values = [...setKeys.map(k => changes[k]), ...pkKeys.map(k => primaryKey[k])];
+
+    const sql = `UPDATE "${tableName}" SET ${setClauses} WHERE ${whereClauses}`;
+    await this.executeQuery(sql, { params: values });
+    return { success: true, affectedRows: 1 };
   }
 
   async deleteRow(tableName: string, primaryKey: Record<string, any>): Promise<MutationResult> {
-    const table = this.mockTables.get(tableName);
-    if (!table) throw new Error(`Table ${tableName} not found`);
+    const pkKeys = Object.keys(primaryKey);
+    if (pkKeys.length === 0) return { success: false, affectedRows: 0, error: 'No primary key provided' };
 
-    const pkKey = Object.keys(primaryKey)[0];
-    const pkVal = primaryKey[pkKey];
+    const whereClauses = pkKeys.map(k => `"${k}" = ?`).join(' AND ');
+    const values = pkKeys.map(k => primaryKey[k]);
 
-    const idx = table.rows.findIndex(r => String(r[pkKey]) === String(pkVal));
-    if (idx >= 0) {
-      table.rows.splice(idx, 1);
-      return { success: true, affectedRows: 1 };
-    }
-    return { success: false, affectedRows: 0, error: 'Record not found' };
-  }
-
-  private initMockSchema(): void {
-    this.mockTables.clear();
-
-    const columns: ColumnInfo[] = [
-      { name: 'COD_ITEM', type: 'INTEGER', isPrimaryKey: true, nullable: false },
-      { name: 'DESCRICAO', type: 'VARCHAR(100)', isPrimaryKey: false, nullable: false },
-      { name: 'UNIDADE', type: 'CHAR(3)', isPrimaryKey: false, nullable: false },
-      { name: 'VALOR_UNIT', type: 'NUMERIC(15,4)', isPrimaryKey: false, nullable: false },
-      { name: 'ALIQ_ICMS', type: 'NUMERIC(5,2)', isPrimaryKey: false, nullable: true }
-    ];
-
-    const rows = [
-      { COD_ITEM: 1, DESCRICAO: 'CAIXA PAPELAO ONDULADO 30X20X15', UNIDADE: 'UN', VALOR_UNIT: 4.8500, ALIQ_ICMS: 18.00 },
-      { COD_ITEM: 2, DESCRICAO: 'FITA ADESIVA TRANSPARENTE 45MMX50M', UNIDADE: 'RL', VALOR_UNIT: 7.2000, ALIQ_ICMS: 12.00 },
-      { COD_ITEM: 3, DESCRICAO: 'FILME STRETCH MANUAL 500MM', UNIDADE: 'BO', VALOR_UNIT: 38.5000, ALIQ_ICMS: 18.00 }
-    ];
-
-    this.mockTables.set('TB_ITENS', { columns, rows });
+    const sql = `DELETE FROM "${tableName}" WHERE ${whereClauses}`;
+    await this.executeQuery(sql, { params: values });
+    return { success: true, affectedRows: 1 };
   }
 }
