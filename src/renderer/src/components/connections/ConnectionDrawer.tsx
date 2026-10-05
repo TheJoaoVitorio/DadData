@@ -104,23 +104,45 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
         setTestResult(null);
       }
     } catch (err: any) {
-      alert(`Erro ao selecionar pasta: ${err.message}`);
+      alert(`Erro ao selecionar diretório: ${err.message}`);
     }
   };
 
-  const buildConfig = (): ConnectionConfig => ({
-    id: `conn_${Date.now()}`,
-    name: connName,
-    type: selectedEngine.type,
-    filePath: filePath || (selectedEngine.type === 'firebird' ? database : undefined),
-    directoryPath: isFileBased && filePath && !filePath.includes('.') ? filePath : undefined,
-    host: selectedEngine.type === 'firebird' ? (host || '127.0.0.1') : (!isFileBased ? host : undefined),
-    port: selectedEngine.type === 'firebird' ? (port || 3050) : (!isFileBased ? port : undefined),
-    database: filePath || database || undefined,
-    user: selectedEngine.type === 'firebird' ? (user || 'SYSDBA') : (!isFileBased ? user : undefined),
-    password: selectedEngine.type === 'firebird' ? (password || 'masterkey') : (!isFileBased ? password : undefined),
-    ssl: !isFileBased ? ssl : undefined
-  });
+  const buildConfig = (): ConnectionConfig => {
+    const base: ConnectionConfig = {
+      id: `conn_${Date.now()}`,
+      name: connName || selectedEngine.label,
+      type: selectedEngine.type
+    };
+
+    if (selectedEngine.type === 'firebird') {
+      return {
+        ...base,
+        host: host || '127.0.0.1',
+        port: port || 3050,
+        database: database || filePath,
+        user: user || 'SYSDBA',
+        password: password || 'masterkey'
+      };
+    }
+
+    if (isFileBased) {
+      return {
+        ...base,
+        filePath
+      };
+    }
+
+    return {
+      ...base,
+      host,
+      port,
+      database,
+      user,
+      password,
+      ssl
+    };
+  };
 
   const handleTest = async () => {
     setIsTesting(true);
@@ -168,32 +190,32 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 z-40 bg-zinc-900/30 backdrop-blur-xs transition-opacity"
       />
 
       {/* Drawer Panel Sliding From Right */}
-      <aside className="fixed inset-y-0 right-0 z-50 w-[540px] max-w-full bg-white shadow-2xl flex flex-col border-l border-[#E2E8E5] animate-in slide-in-from-right duration-300">
+      <aside className="fixed inset-y-0 right-0 z-50 w-[540px] max-w-full bg-white shadow-2xl flex flex-col border-l border-zinc-200 animate-in slide-in-from-right duration-300">
         {/* Drawer Header */}
-        <div className="p-5 border-b border-[#E2E8E5] flex items-center justify-between">
+        <div className="p-5 border-b border-zinc-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-2xl bg-[#0C1818] border border-[#1E3B3A]">
+            <div className="p-2 rounded-2xl bg-amber-50 border border-amber-200">
               <DatabaseIcon type={selectedEngine.type} className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#0C1818]">Nova Conexão</h3>
-              <p className="text-xs text-[#64837E]">Selecione o motor e informe as credenciais</p>
+              <h3 className="text-base font-bold text-zinc-900">Nova Conexão</h3>
+              <p className="text-xs text-zinc-500">Selecione o motor e informe as credenciais</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-[#F2F6F4] text-[#64837E] hover:text-[#0C1818] transition-colors"
+            className="p-2 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Category Filter Pills */}
-        <div className="px-5 pt-3 pb-2 flex gap-1.5 select-none bg-[#F8FAF9] border-b border-[#E2E8E5]">
+        <div className="px-5 pt-3 pb-2 flex gap-1.5 select-none bg-zinc-50/70 border-b border-zinc-200">
           {[
             { id: 'all', label: 'Todos os Motores' },
             { id: 'legacy', label: 'Bancos Legados & ERP' },
@@ -204,8 +226,8 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
               onClick={() => setActiveCategory(cat.id as any)}
               className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
                 activeCategory === cat.id
-                  ? 'bg-[#0C1818] text-[#00F566] shadow-sm'
-                  : 'bg-white text-[#64837E] border border-[#D3DDD8] hover:bg-[#F2F6F4]'
+                  ? 'bg-[#FACC15] text-zinc-950 shadow-xs'
+                  : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50'
               }`}
             >
               {cat.label}
@@ -214,8 +236,8 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
         </div>
 
         {/* Database Engine Selector Grid */}
-        <div className="px-5 py-3 border-b border-[#E2E8E5]">
-          <label className="block text-xs font-bold text-[#142929] uppercase tracking-wider mb-2">
+        <div className="px-5 py-3 border-b border-zinc-200">
+          <label className="block text-xs font-bold text-zinc-800 uppercase tracking-wider mb-2">
             Motor de Banco de Dados
           </label>
           <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
@@ -228,14 +250,14 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                   onClick={() => handleSelectEngine(eng)}
                   className={`p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
                     isSelected
-                      ? 'border-[#00F566] bg-[#00F566]/10 shadow-sm ring-2 ring-[#00F566]/20'
-                      : 'border-[#E2E8E5] hover:border-[#A0B5B1] hover:bg-[#F8FAF9]'
+                      ? 'border-amber-400 bg-amber-50 shadow-xs ring-2 ring-amber-400/20'
+                      : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
                   }`}
                 >
                   <DatabaseIcon type={eng.type} className="w-7 h-7 flex-shrink-0" />
                   <div className="truncate">
-                    <div className="text-xs font-bold text-[#0C1818] truncate">{eng.label}</div>
-                    <div className="text-[10px] text-[#64837E] truncate">{eng.description}</div>
+                    <div className="text-xs font-bold text-zinc-900 truncate">{eng.label}</div>
+                    <div className="text-[10px] text-zinc-500 truncate">{eng.description}</div>
                   </div>
                 </button>
               );
@@ -247,90 +269,85 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
         <form onSubmit={handleConnectSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Connection Name */}
           <div>
-            <label className="block text-xs font-bold text-[#142929] mb-1">Identificação da Conexão</label>
+            <label className="block text-xs font-bold text-zinc-800 mb-1">Identificação da Conexão</label>
             <input
               type="text"
               required
               value={connName}
               onChange={e => setConnName(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-medium focus:outline-none transition-all"
+              className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 focus:outline-none transition-all"
             />
           </div>
 
+          {/* Engine Specific Fields */}
           {selectedEngine.type === 'firebird' ? (
-            /* Firebird Configuration: File (.FDB) + Host / Port / User / Password */
+            /* Firebird Special Form (Needs Host, Port, and Database File) */
             <div className="space-y-3">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#142929]">
-                  Arquivo do Banco Firebird (.FDB / .GDB)
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-1">
+                  Arquivo do Banco Firebird (.FDB)
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     required
-                    placeholder="Ex: C:\Sistemas\DADOS.FDB"
-                    value={filePath}
-                    onChange={e => {
-                      setFilePath(e.target.value);
-                      setDatabase(e.target.value);
-                    }}
-                    className="flex-1 px-3.5 py-2.5 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    placeholder="Ex: C:\Sistemas\HOST.FDB"
+                    value={database}
+                    onChange={e => setDatabase(e.target.value)}
+                    className="flex-1 px-3.5 py-2.5 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={handleBrowseFile}
-                    className="px-3.5 py-2.5 rounded-xl bg-[#00F566]/15 hover:bg-[#00F566]/25 border border-[#00F566]/30 text-xs font-bold text-[#047857] flex items-center gap-1.5 shadow-sm transition-all"
+                    className="px-3.5 py-2.5 rounded-xl bg-amber-100 hover:bg-amber-200/80 border border-amber-300 text-xs font-bold text-amber-950 flex items-center gap-1.5 shadow-xs transition-all"
                   >
-                    <FolderOpen className="w-3.5 h-3.5 text-[#047857]" />
-                    <span>Arquivo</span>
+                    <FolderOpen className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Arquivo .FDB</span>
                   </button>
                 </div>
-                <p className="text-[11px] text-[#64837E]">
-                  Selecione o arquivo do banco no seu computador (.FDB).
-                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-xs font-bold text-[#142929] mb-1">Host / Servidor</label>
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-zinc-800 mb-1">Host / Servidor</label>
                   <input
                     type="text"
                     required
                     value={host}
                     onChange={e => setHost(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#142929] mb-1">Porta</label>
+                  <label className="block text-xs font-bold text-zinc-800 mb-1">Porta</label>
                   <input
                     type="number"
                     value={port}
                     onChange={e => setPort(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-bold text-[#142929] mb-1">Usuário</label>
+                  <label className="block text-xs font-bold text-zinc-800 mb-1">Usuário</label>
                   <input
                     type="text"
                     required
                     value={user}
                     onChange={e => setUser(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#142929] mb-1">Senha</label>
+                  <label className="block text-xs font-bold text-zinc-800 mb-1">Senha</label>
                   <input
                     type="password"
                     required
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                 </div>
               </div>
@@ -338,7 +355,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
           ) : isFileBased ? (
             /* File Based Configuration */
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-[#142929] mb-1">
+              <label className="block text-xs font-bold text-zinc-800 mb-1">
                 Caminho do Arquivo ou Diretório
               </label>
               <div className="flex gap-2">
@@ -348,14 +365,14 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                   placeholder="Ex: C:\Sistemas\CLIENTES.DBF ou pasta"
                   value={filePath}
                   onChange={e => setFilePath(e.target.value)}
-                  className="flex-1 px-3.5 py-2.5 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                  className="flex-1 px-3.5 py-2.5 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleBrowseFile}
-                  className="px-3.5 py-2.5 rounded-xl bg-[#00F566]/15 hover:bg-[#00F566]/25 border border-[#00F566]/30 text-xs font-bold text-[#047857] flex items-center gap-1.5 shadow-sm transition-all"
+                  className="px-3.5 py-2.5 rounded-xl bg-amber-100 hover:bg-amber-200/80 border border-amber-300 text-xs font-bold text-amber-950 flex items-center gap-1.5 shadow-xs transition-all"
                 >
-                  <FolderOpen className="w-3.5 h-3.5 text-[#047857]" />
+                  <FolderOpen className="w-3.5 h-3.5 text-amber-700" />
                   <span>Arquivo</span>
                 </button>
                 {['dbf', 'paradox', 'hfsql'].includes(selectedEngine.type) && (
@@ -363,13 +380,13 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                     type="button"
                     onClick={handleBrowseDir}
                     title="Selecionar pasta inteira contendo múltiplas tabelas"
-                    className="px-3 py-2.5 rounded-xl bg-white border border-[#D3DDD8] hover:bg-[#F2F6F4] text-xs font-semibold text-[#142929] flex items-center gap-1 shadow-sm"
+                    className="px-3 py-2.5 rounded-xl bg-white border border-zinc-200 hover:bg-zinc-50 text-xs font-semibold text-zinc-800 flex items-center gap-1 shadow-xs"
                   >
                     <span>Pasta</span>
                   </button>
                 )}
               </div>
-              <p className="text-[11px] text-[#64837E]">
+              <p className="text-[11px] text-zinc-500">
                 {selectedEngine.type === 'dbf'
                   ? 'Selecione um arquivo .DBF específico ou uma pasta com vários DBFs.'
                   : selectedEngine.type === 'paradox'
@@ -388,59 +405,59 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-[#142929] mb-1">Host / Servidor</label>
+                  <label className="block text-xs font-bold text-zinc-800 mb-1">Host / Servidor</label>
                   <input
                     type="text"
                     required
                     placeholder="localhost ou IP"
                     value={host}
                     onChange={e => setHost(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#142929] mb-1">Porta</label>
+                  <label className="block text-xs font-bold text-zinc-800 mb-1">Porta</label>
                   <input
                     type="number"
                     required
                     value={port}
                     onChange={e => setPort(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#142929] mb-1">Nome do Banco de Dados</label>
+                <label className="block text-xs font-bold text-zinc-800 mb-1">Nome do Banco de Dados</label>
                 <input
                   type="text"
                   required
                   placeholder="Ex: financeiro_db"
                   value={database}
                   onChange={e => setDatabase(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                  className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-bold text-[#142929] mb-1">Usuário</label>
+                  <label className="block text-xs font-bold text-zinc-800 mb-1">Usuário</label>
                   <input
                     type="text"
                     placeholder="Ex: postgres, root, sa"
                     value={user}
                     onChange={e => setUser(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#142929] mb-1">Senha</label>
+                  <label className="block text-xs font-bold text-zinc-800 mb-1">Senha</label>
                   <input
                     type="password"
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-[#F8FAF9] focus:bg-white border border-[#D3DDD8] focus:border-[#00F566] rounded-xl text-xs text-[#0C1818] font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
                   />
                 </div>
               </div>
@@ -452,12 +469,12 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
             <div
               className={`p-3 rounded-2xl text-xs flex items-center gap-2 border ${
                 testResult.success
-                  ? 'bg-[#00F566]/15 text-[#047857] border-[#00F566]/30 font-semibold'
+                  ? 'bg-amber-50 text-amber-900 border-amber-300 font-semibold'
                   : 'bg-rose-50 text-rose-800 border-rose-200'
               }`}
             >
               {testResult.success ? (
-                <CheckCircle2 className="w-4 h-4 text-[#047857] flex-shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-amber-600 flex-shrink-0" />
               ) : (
                 <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
               )}
@@ -467,14 +484,14 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
         </form>
 
         {/* Drawer Actions Footer */}
-        <div className="p-5 border-t border-[#E2E8E5] flex items-center justify-between bg-[#F8FAF9]">
+        <div className="p-5 border-t border-zinc-200 flex items-center justify-between bg-zinc-50/70">
           <button
             type="button"
             onClick={handleTest}
             disabled={isTesting}
-            className="px-4 py-2 rounded-full border border-[#D3DDD8] bg-white text-xs font-bold text-[#142929] hover:bg-[#F2F6F4] transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 rounded-full border border-zinc-200 bg-white text-xs font-bold text-zinc-800 hover:bg-zinc-50 transition-colors flex items-center gap-1.5 shadow-xs"
           >
-            <FileCheck className="w-3.5 h-3.5 text-[#64837E]" />
+            <FileCheck className="w-3.5 h-3.5 text-zinc-500" />
             <span>{isTesting ? 'Testando...' : 'Testar Conexão'}</span>
           </button>
 
@@ -482,14 +499,14 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full border border-[#D3DDD8] text-xs font-semibold text-[#64837E] hover:bg-[#E2E8E5] transition-colors"
+              className="px-4 py-2 rounded-full border border-zinc-200 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 transition-colors"
             >
               Cancelar
             </button>
             <button
               onClick={handleConnectSubmit}
               disabled={isConnecting}
-              className="px-6 py-2.5 rounded-full bg-[#00F566] hover:bg-[#00DF61] text-[#0C1818] text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+              className="px-6 py-2.5 rounded-full bg-[#FACC15] hover:bg-[#EAB308] text-zinc-950 text-xs font-bold flex items-center gap-2 shadow-xs transition-all active:scale-95 disabled:opacity-50"
             >
               <span>{isConnecting ? 'Conectando...' : 'Conectar Banco'}</span>
             </button>

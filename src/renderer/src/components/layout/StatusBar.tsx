@@ -32,48 +32,48 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
   if (!activeConnection) {
     return (
-      <footer className="h-8 bg-[#0C1818] border-t border-[#1E3B3A] px-4 flex items-center justify-between text-[11px] text-[#64837E] select-none">
+      <footer className="h-8 bg-white border-t border-zinc-200/80 px-4 flex items-center justify-between text-[11px] text-zinc-400 select-none">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#1E3B3A]" />
+          <span className="w-2 h-2 rounded-full bg-zinc-300" />
           <span>Nenhum banco de dados conectado</span>
         </div>
-        <span className="font-mono text-[10px] text-[#64837E]">DadData Client Pronto</span>
+        <span className="font-mono text-[10px] text-zinc-400">DadData Pronto</span>
       </footer>
     );
   }
 
   return (
-    <footer className="h-8 bg-[#0C1818] text-slate-200 border-t border-[#1E3B3A] px-4 flex items-center justify-between text-[11px] font-medium select-none z-30">
+    <footer className="h-8 bg-white text-zinc-600 border-t border-zinc-200/80 px-4 flex items-center justify-between text-[11px] font-medium select-none z-30">
       {/* Left: Active Connection Pill */}
       <div className="flex items-center gap-2.5">
-        <div className="flex items-center gap-1.5 font-bold text-white">
-          <span className="w-2 h-2 rounded-full bg-[#00F566] animate-pulse" />
+        <div className="flex items-center gap-1.5 font-bold text-zinc-900">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
           <span>{activeConnection.name}</span>
         </div>
-        <span className="text-[10px] uppercase font-bold px-2 py-0.2 rounded-full bg-[#183434] text-[#00F566] font-mono border border-[#1E3B3A]">
+        <span className="text-[10px] uppercase font-bold px-2 py-0.2 rounded-full bg-amber-100 text-amber-950 font-mono border border-amber-300/60">
           {activeConnection.type}
         </span>
         {selectedTable && (
-          <span className="text-[10px] text-[#8EA8A3] font-mono border-l border-[#1E3B3A] pl-2">
-            tabela: <strong className="text-white">{selectedTable}</strong>
+          <span className="text-[10px] text-zinc-500 font-mono border-l border-zinc-200 pl-2">
+            tabela: <strong className="text-zinc-800">{selectedTable}</strong>
           </span>
         )}
       </div>
 
       {/* Center: Result Metrics */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#162E2E] text-slate-300 font-semibold border border-[#1E3B3A]">
-          <span className="text-[#00F566] font-mono font-bold">●</span>
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 font-semibold border border-zinc-200">
+          <span className="text-amber-500 font-mono font-bold">●</span>
           <span>Resultado</span>
         </div>
 
-        <div className="flex items-center gap-1 font-mono text-[11px] text-slate-300">
-          <span className="text-[#64837E]">linhas:</span>
-          <span className="font-bold text-[#00F566]">{rowCount}</span>
+        <div className="flex items-center gap-1 font-mono text-[11px] text-zinc-600">
+          <span className="text-zinc-400">linhas:</span>
+          <span className="font-bold text-amber-700">{rowCount}</span>
         </div>
 
-        <div className="flex items-center gap-1 font-mono text-[11px] text-slate-300">
-          <Clock className="w-3 h-3 text-[#00F566]" />
+        <div className="flex items-center gap-1 font-mono text-[11px] text-zinc-600">
+          <Clock className="w-3 h-3 text-amber-500" />
           <span>{latencySec}s</span>
         </div>
       </div>
@@ -82,36 +82,35 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       <div className="relative">
         <button
           onClick={() => setIsExportOpen(!isExportOpen)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#183434] hover:bg-[#1E3B3A] border border-[#1E3B3A] text-slate-200 hover:text-white text-[11px] font-semibold transition-all shadow-sm active:scale-95"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 border border-zinc-200 text-zinc-800 text-[11px] font-semibold transition-all shadow-xs active:scale-95"
         >
-          <Download className="w-3 h-3 text-[#00F566]" />
+          <Download className="w-3 h-3 text-amber-600" />
           <span>Exportar</span>
-          <ChevronDown className="w-3 h-3 text-[#64837E]" />
+          <ChevronDown className="w-3 h-3 text-zinc-400" />
         </button>
 
         {isExportOpen && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setIsExportOpen(false)} />
-            <div className="absolute right-0 bottom-full mb-1 w-44 bg-[#162E2E] border border-[#1E3B3A] rounded-xl p-1.5 shadow-2xl z-40 space-y-1">
+            <div className="absolute right-0 bottom-full mb-1 w-44 bg-white border border-zinc-200 rounded-xl p-1.5 shadow-xl z-40 space-y-1">
               <button
                 onClick={() => {
                   setIsExportOpen(false);
                   onExportCsv();
                 }}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 text-slate-300 hover:bg-[#1E3B3A] hover:text-[#00F566] transition-colors"
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-amber-50 hover:text-amber-950 text-zinc-800 transition-colors"
               >
-                <Download className="w-3.5 h-3.5 text-[#00F566]" />
+                <Download className="w-3.5 h-3.5 text-zinc-500" />
                 <span>Exportar CSV</span>
               </button>
-
               <button
                 onClick={() => {
                   setIsExportOpen(false);
                   onExportExcel();
                 }}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 text-slate-300 hover:bg-[#1E3B3A] hover:text-[#00F566] transition-colors"
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-amber-50 hover:text-amber-950 text-zinc-800 transition-colors"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-[#00F566]" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-amber-600" />
                 <span>Exportar Excel (.xlsx)</span>
               </button>
             </div>

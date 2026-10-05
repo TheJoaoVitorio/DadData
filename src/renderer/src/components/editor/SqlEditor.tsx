@@ -35,12 +35,12 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
   };
 
   return (
-    <div className="rounded-2xl bg-[#112323] text-white p-4 shadow-abacate-card border border-[#1E3B3A] flex flex-col relative overflow-hidden group">
+    <div className="rounded-2xl bg-white text-zinc-900 p-4 shadow-sm border border-zinc-200/90 flex flex-col relative group">
       {/* Editor Header */}
-      <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#1E3B3A] select-none">
+      <div className="flex items-center justify-between pb-3 mb-2.5 border-b border-zinc-150 select-none">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-[#00F566]" />
-          <span className="text-xs font-bold text-white tracking-wide">Editor SQL / NoSQL</span>
+          <Terminal className="w-4 h-4 text-amber-500" />
+          <span className="text-xs font-bold text-zinc-900 tracking-wide">Editor SQL / NoSQL</span>
         </div>
 
         {/* Quick Snippets */}
@@ -49,7 +49,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
             <button
               key={snippet}
               onClick={() => insertSnippet(snippet)}
-              className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#183434] hover:bg-[#1E3B3A] text-[#8EA8A3] hover:text-[#00F566] border border-[#1E3B3A] transition-colors"
+              className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-zinc-100 hover:bg-amber-100 hover:text-amber-900 hover:border-amber-300 text-zinc-600 border border-zinc-200 transition-colors"
             >
               {snippet}
             </button>
@@ -58,42 +58,42 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
       </div>
 
       {/* Code Textarea - Controlled by Tab State */}
-      <div className="relative flex-1 min-h-[110px] max-h-[200px]">
+      <div className="relative flex-1 min-h-[100px] max-h-[220px] bg-zinc-50 border border-zinc-200/80 rounded-xl p-3 focus-within:bg-white focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all">
         <textarea
           value={query}
           onChange={e => onQueryChange(e.target.value)}
           onKeyDown={handleKeyDown}
           spellCheck={false}
-          className="w-full h-full min-h-[110px] bg-transparent text-slate-100 font-mono text-xs leading-relaxed resize-none focus:outline-none placeholder-[#64837E]"
+          className="w-full h-full min-h-[100px] bg-transparent text-zinc-900 font-mono text-xs leading-relaxed resize-none focus:outline-none placeholder-zinc-400"
           placeholder="Escreva sua consulta SQL aqui (ex: SELECT * FROM clientes)..."
         />
       </div>
 
       {/* Bottom Action Bar */}
-      <div className="pt-3 mt-1 border-t border-[#1E3B3A] flex items-center justify-between select-none">
+      <div className="pt-3 mt-2.5 border-t border-zinc-150 flex items-center justify-between select-none">
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopy}
-            className="px-3 py-1.5 rounded-lg bg-[#183434] hover:bg-[#1E3B3A] border border-[#1E3B3A] text-[#8EA8A3] hover:text-white text-xs flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 border border-zinc-200 text-zinc-700 text-xs flex items-center gap-1.5 transition-colors font-medium"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-[#00F566]" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-3.5 h-3.5 text-amber-600" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? 'Copiado!' : 'Copiar'}</span>
           </button>
 
           <button
             onClick={() => onQueryChange('')}
-            className="px-3 py-1.5 rounded-lg bg-[#183434] hover:bg-[#1E3B3A] border border-[#1E3B3A] text-[#8EA8A3] hover:text-rose-400 text-xs flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 border border-zinc-200 text-zinc-700 text-xs flex items-center gap-1.5 transition-colors font-medium"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Limpar</span>
           </button>
         </div>
 
-        {/* AbacatePay Signature Execute Button */}
+        {/* AbacatePay Signature Yellow Execute Button */}
         <button
           onClick={() => onExecute(query)}
           disabled={isLoading || !query.trim()}
-          className="px-5 py-2 rounded-xl bg-[#00F566] hover:bg-[#00DF61] text-[#0C1818] text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:hover:bg-[#00F566]"
+          className="px-5 py-2 rounded-xl bg-[#FACC15] hover:bg-[#EAB308] text-zinc-950 text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:hover:bg-[#FACC15]"
         >
           <Play className={`w-3.5 h-3.5 fill-current ${isLoading ? 'animate-spin' : ''}`} />
           <span>{isLoading ? 'Executando...' : 'Executar'}</span>

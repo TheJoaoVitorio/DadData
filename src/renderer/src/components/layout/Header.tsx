@@ -17,61 +17,55 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading
 }) => {
   return (
-    <header className="h-16 px-6 flex items-center justify-between z-10 border-b border-[#E2E8E5] bg-white/80 backdrop-blur-md">
-      {/* Brand & Logo - AbacatePay Style */}
-      <div className="flex items-center gap-3.5">
-        <div className="w-10 h-10 rounded-2xl bg-[#0C1818] border border-[#1E3B3A] flex items-center justify-center p-2 relative group cursor-pointer transition-transform hover:scale-105 shadow-sm">
-          {/* Avocado-inspired geometric icon with neon seed */}
-          <svg viewBox="0 0 32 32" className="w-6 h-6" fill="none">
+    <header className="h-14 px-6 flex items-center justify-between z-10 border-b border-zinc-200/80 bg-white">
+      {/* Brand & Logo - AbacatePay Minimalist Style */}
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center p-1.5 transition-transform hover:scale-105 shadow-sm">
+          {/* Avocado with warm golden seed */}
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
             <path
-              d="M16 4C10.5 4 6 9.5 6 16C6 22.5 10.5 28 16 28C21.5 28 26 22.5 26 16C26 9.5 21.5 4 16 4Z"
-              stroke="#00F566"
-              strokeWidth="2.2"
+              d="M12 2.5C8 2.5 5 7 5 12.5C5 18 8 21.5 12 21.5C16 21.5 19 18 19 12.5C19 7 16 2.5 12 2.5Z"
+              stroke="#18181B"
+              strokeWidth="1.8"
               strokeLinejoin="round"
             />
-            <circle cx="16" cy="18" r="5" fill="#00F566" />
-            <path d="M16 4V9" stroke="#00F566" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="14" r="3.2" fill="#FACC15" stroke="#18181B" strokeWidth="1.4" />
+            <path d="M12 2.5V5" stroke="#18181B" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         </div>
 
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold tracking-tight text-[#0C1818]">DadData</h1>
-            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#00F566]/15 text-[#047857] border border-[#00F566]/40">
-              Universal DB
-            </span>
-          </div>
-          <p className="text-[11px] text-[#64837E] font-medium">Bancos Modernos &amp; Legados (DBF, Paradox, Access, HFSQL, Firebird)</p>
+        <div className="flex items-center gap-2">
+          <span className="text-xl font-bold tracking-tight text-zinc-900 font-sans">DadData</span>
         </div>
       </div>
 
       {/* Active Database Badge Pill */}
       {activeConnection && (
-        <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[#F2F6F4] border border-[#D3DDD8] shadow-sm">
+        <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-zinc-100/80 border border-zinc-200 shadow-sm">
           <DatabaseIcon type={activeConnection.type} className="w-4 h-4 flex-shrink-0" />
-          <span className="text-xs font-semibold text-[#0C1818]">{activeConnection.name}</span>
-          <span className="text-[10px] uppercase px-2 py-0.5 rounded-full font-mono font-bold bg-[#0C1818] text-[#00F566]">
+          <span className="text-xs font-semibold text-zinc-900">{activeConnection.name}</span>
+          <span className="text-[10px] uppercase px-2 py-0.5 rounded-full font-mono font-bold bg-amber-100 text-amber-950 border border-amber-300/80">
             {activeConnection.type}
           </span>
           <button
             onClick={onRefreshSchema}
             disabled={isLoading}
             title="Recarregar Esquema e Tabelas"
-            className="p-1 hover:bg-[#E2E8E5] rounded-full transition-colors ml-1 text-[#64837E] hover:text-[#0C1818]"
+            className="p-1 hover:bg-zinc-200 rounded-full transition-colors ml-0.5 text-zinc-500 hover:text-zinc-900"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#047857]' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-amber-600' : ''}`} />
           </button>
         </div>
       )}
 
       {/* Header Actions */}
       <div className="flex items-center gap-3">
-        {/* AbacatePay Signature Neon CTA */}
+        {/* AbacatePay Signature Yellow CTA Button */}
         <button
           onClick={onOpenNewConnection}
-          className="h-9 px-4 rounded-full bg-[#00F566] hover:bg-[#00DF61] text-[#0C1818] text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm hover:shadow active:scale-95"
+          className="h-8 px-4 rounded-full bg-[#FACC15] hover:bg-[#EAB308] text-zinc-950 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm hover:shadow active:scale-95"
         >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
+          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
           <span>Nova Conexão</span>
         </button>
       </div>

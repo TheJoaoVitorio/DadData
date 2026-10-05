@@ -472,20 +472,23 @@ export const App: React.FC = () => {
   const currentTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden text-[#0C1818]">
+    <div className="flex flex-col h-screen overflow-hidden text-zinc-900 bg-[#F8FAF9]">
+      {/* AbacatePay Signature Yellow Top Stripe */}
+      <div className="h-1 w-full bg-[#FACC15] flex-shrink-0" />
+
       {/* Toast Notification */}
       {toast && (
         <div
           className={`fixed top-4 right-6 z-50 px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border backdrop-blur-md transition-all ${
             toast.type === 'success'
-              ? 'bg-[#0C1818] text-[#00F566] border-[#00F566]/40 shadow-abacate-glow'
-              : 'bg-[#2A0E12] text-rose-300 border-rose-500/40'
+              ? 'bg-white text-zinc-900 border-amber-300 shadow-amber-500/10'
+              : 'bg-white text-rose-900 border-rose-300 shadow-rose-500/10'
           }`}
         >
           {toast.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 text-[#00F566]" />
+            <CheckCircle2 className="w-4 h-4 text-amber-500" />
           ) : (
-            <AlertCircle className="w-4 h-4 text-rose-400" />
+            <AlertCircle className="w-4 h-4 text-rose-500" />
           )}
           <span>{toast.message}</span>
         </div>
@@ -532,9 +535,9 @@ export const App: React.FC = () => {
         />
 
         {/* Central Workspace Card */}
-        <main className="flex-1 bg-white rounded-3xl p-5 shadow-abacate-card border border-[#E2E8E5] flex flex-col min-h-0 overflow-hidden">
+        <main className="flex-1 bg-white rounded-3xl p-5 shadow-sm border border-zinc-200/90 flex flex-col min-h-0 overflow-hidden">
           {/* Tabs Bar */}
-          <div className="flex items-center gap-1.5 pb-2.5 mb-3 border-b border-[#E2E8E5] flex-shrink-0 select-none overflow-x-auto">
+          <div className="flex items-center gap-1.5 pb-2.5 mb-3 border-b border-zinc-200/80 flex-shrink-0 select-none overflow-x-auto">
             {tabs.map(tab => {
               const isActive = tab.id === activeTabId;
               return (
@@ -543,21 +546,21 @@ export const App: React.FC = () => {
                   onClick={() => handleTabClick(tab)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
                     isActive
-                      ? 'bg-[#0C1818] text-[#00F566] border border-[#1E3B3A] shadow-sm'
-                      : 'bg-[#F2F6F4] hover:bg-[#E5ECE9] text-[#142929]'
+                      ? 'bg-[#FACC15] text-zinc-950 border border-amber-400 shadow-xs'
+                      : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700'
                   }`}
                 >
                   {tab.type === 'query' ? (
-                    <span className="font-mono text-[11px] font-bold text-[#00F566]">&lt;&gt;</span>
+                    <span className={`font-mono text-[11px] font-bold ${isActive ? 'text-zinc-950' : 'text-amber-600'}`}>&lt;&gt;</span>
                   ) : tab.type === 'view' ? (
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor">
+                    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-amber-600'}`} fill="none" stroke="currentColor">
                       <rect x="1.5" y="2" width="13" height="12" rx="1.5" strokeWidth="1.3" strokeDasharray="2 1.5" />
                       <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
                       <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
                       <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
                     </svg>
                   ) : (
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#00F566] flex-shrink-0" fill="currentColor">
+                    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-zinc-600'}`} fill="currentColor">
                       <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
                       <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
                       <line x1="1.5" y1="10" x2="14.5" y2="10" strokeWidth="1.2" />
@@ -569,13 +572,13 @@ export const App: React.FC = () => {
                   <span>{tab.title}</span>
 
                   {tab.type !== 'query' && (
-                    <span className="text-[10px] text-[#8EA8A3] font-mono font-normal">[all]</span>
+                    <span className={`text-[10px] font-mono font-normal ${isActive ? 'text-zinc-800' : 'text-zinc-400'}`}>[all]</span>
                   )}
 
                   {tabs.length > 1 && (
                     <button
                       onClick={e => handleCloseTab(tab.id, e)}
-                      className="hover:opacity-75 p-0.5 rounded-full text-[#8EA8A3] hover:text-white"
+                      className="hover:opacity-75 p-0.5 rounded-full text-zinc-500 hover:text-zinc-950"
                       title="Fechar aba"
                     >
                       <X className="w-3 h-3" />
@@ -588,7 +591,7 @@ export const App: React.FC = () => {
             {/* New Tab Button */}
             <button
               onClick={handleOpenNewQuery}
-              className="p-1.5 rounded-xl hover:bg-[#F2F6F4] text-[#64837E] hover:text-[#0C1818] transition-colors"
+              className="p-1.5 rounded-xl hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-colors"
               title="Nova Consulta SQL (Ctrl+N)"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
