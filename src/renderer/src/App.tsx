@@ -15,15 +15,19 @@ import {
   ColumnInfo,
   ExportOptions
 } from '@shared/types/database';
-import { Terminal, Table as TableIcon, X, CheckCircle2, AlertCircle, Monitor, Plus } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Monitor, Plus } from 'lucide-react';
 import { safeApi, isDesktopElectron } from './services/api-client';
 
-interface TabItem {
+export interface TabItem {
   id: string;
   title: string;
   type: 'query' | 'table' | 'view';
   tableName?: string;
   schema?: string;
+  query?: string;
+  queryResult?: QueryResult | null;
+  columnsMeta?: ColumnInfo[];
+  isLoading?: boolean;
 }
 
 export const App: React.FC = () => {
@@ -33,15 +37,21 @@ export const App: React.FC = () => {
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
 
-  // Tabs
+  // Tabs - each tab encapsulates its own query, queryResult, columnsMeta, and loading state
   const [tabs, setTabs] = useState<TabItem[]>([
-    { id: 'query_1', title: 'Consulta SQL 1', type: 'query' }
+    {
+      id: 'query_1',
+      title: 'Consulta SQL 1',
+      type: 'query',
+      query: 'SELECT * FROM clients LIMIT 50;',
+      queryResult: null,
+      columnsMeta: [],
+      isLoading: false
+    }
   ]);
   const [activeTabId, setActiveTabId] = useState<string>('query_1');
 
-  // Query & Table Data
-  const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
-  const [columnsMeta, setColumnsMeta] = useState<ColumnInfo[]>([]);
+  // Global loading (for connection / schema refreshes)
   const [isLoading, setIsLoading] = useState(false);
 
   // Drawers
@@ -73,6 +83,33 @@ export const App: React.FC = () => {
     }
   };
 
+  // Helper to load table data and metadata into a specific tab
+  const loadTableDataForTab = async (tabId: string, tableName: string, connId: string) => {
+    setTabs(prev =>
+      prev.map(t => (t.id === tabId ? { ...t, isLoading: true } : t))
+    );
+
+    try {
+      const [meta, data] = await Promise.all([
+        safeApi.describeTable(connId, tableName).catch(() => []),
+        safeApi.getTableData(connId, tableName)
+      ]);
+
+      setTabs(prev =>
+        prev.map(t =>
+          t.id === tabId
+            ? { ...t, columnsMeta: meta, queryResult: data, isLoading: false }
+            : t
+        )
+      );
+    } catch (err: any) {
+      setTabs(prev =>
+        prev.map(t => (t.id === tabId ? { ...t, isLoading: false } : t))
+      );
+      showToast(`Erro ao carregar dados de ${tableName}: ${err.message}`, 'error');
+    }
+  };
+
   const handleConnect = async (config: ConnectionConfig) => {
     setIsLoading(true);
     try {
@@ -89,10 +126,49 @@ export const App: React.FC = () => {
         setTables(tableList);
 
         if (tableList.length > 0) {
-          await handleSelectTable(tableList[0].name, config.id);
+          const firstTable = tableList[0].name;
+          const entity = tableList[0];
+          const tabType: 'table' | 'view' = entity.type === 'view' ? 'view' : 'table';
+          const tabId = `${tabType}_${firstTable}`;
+
+          setSelectedTable(firstTable);
+          setTabs([
+            {
+              id: 'query_1',
+              title: 'Consulta SQL 1',
+              type: 'query',
+              query: `SELECT * FROM "${firstTable}" LIMIT 100;`,
+              queryResult: null,
+              columnsMeta: [],
+              isLoading: false
+            },
+            {
+              id: tabId,
+              title: firstTable,
+              type: tabType,
+              tableName: firstTable,
+              schema: entity.schema,
+              queryResult: null,
+              columnsMeta: [],
+              isLoading: true
+            }
+          ]);
+          setActiveTabId(tabId);
+          await loadTableDataForTab(tabId, firstTable, config.id);
         } else {
-          setQueryResult(null);
           setSelectedTable(null);
+          setTabs([
+            {
+              id: 'query_1',
+              title: 'Consulta SQL 1',
+              type: 'query',
+              query: 'SELECT * FROM clients LIMIT 50;',
+              queryResult: null,
+              columnsMeta: [],
+              isLoading: false
+            }
+          ]);
+          setActiveTabId('query_1');
         }
 
         showToast(`Conectado a ${config.name}! (${tableList.length} tabelas carregadas)`);
@@ -111,7 +187,18 @@ export const App: React.FC = () => {
       setActiveConnection(null);
       setTables([]);
       setSelectedTable(null);
-      setQueryResult(null);
+      setTabs([
+        {
+          id: 'query_1',
+          title: 'Consulta SQL 1',
+          type: 'query',
+          query: 'SELECT * FROM clients LIMIT 50;',
+          queryResult: null,
+          columnsMeta: [],
+          isLoading: false
+        }
+      ]);
+      setActiveTabId('query_1');
       showToast('Desconectado do banco.');
     } catch (err: any) {
       showToast(`Erro ao desconectar: ${err.message}`, 'error');
@@ -124,8 +211,10 @@ export const App: React.FC = () => {
     try {
       const tableList = await safeApi.listTables(activeConnection.id);
       setTables(tableList);
-      if (selectedTable) {
-        await handleSelectTable(selectedTable);
+
+      const activeTab = tabs.find(t => t.id === activeTabId);
+      if (activeTab && activeTab.tableName) {
+        await loadTableDataForTab(activeTab.id, activeTab.tableName, activeConnection.id);
       }
       showToast(`Esquema atualizado: ${tableList.length} tabelas carregadas.`);
     } catch (err: any) {
@@ -139,62 +228,171 @@ export const App: React.FC = () => {
     const targetConnId = connId || activeConnection?.id;
     if (!targetConnId) return;
 
-    setIsLoading(true);
     setSelectedTable(tableName);
 
-    // Identify if table or view
     const entity = tables.find(t => t.name === tableName);
     const tabType: 'table' | 'view' = entity?.type === 'view' ? 'view' : 'table';
-
-    // Add or activate table tab
     const tabId = `${tabType}_${tableName}`;
-    if (!tabs.some(t => t.id === tabId)) {
-      setTabs(prev => [
-        ...prev,
-        { id: tabId, title: tableName, type: tabType, tableName, schema: entity?.schema }
-      ]);
+
+    // If tab already exists, activate it and load data if not yet loaded
+    const existingTab = tabs.find(t => t.id === tabId);
+    if (existingTab) {
+      setActiveTabId(tabId);
+      if (!existingTab.queryResult && !existingTab.isLoading) {
+        await loadTableDataForTab(tabId, tableName, targetConnId);
+      }
+      return;
     }
+
+    // Create new table tab
+    const newTab: TabItem = {
+      id: tabId,
+      title: tableName,
+      type: tabType,
+      tableName,
+      schema: entity?.schema,
+      queryResult: null,
+      columnsMeta: [],
+      isLoading: true
+    };
+
+    setTabs(prev => [...prev, newTab]);
     setActiveTabId(tabId);
 
-    try {
-      const [meta, data] = await Promise.all([
-        safeApi.describeTable(targetConnId, tableName).catch(() => []),
-        safeApi.getTableData(targetConnId, tableName)
-      ]);
-      setColumnsMeta(meta);
-      setQueryResult(data);
-    } catch (err: any) {
-      showToast(`Erro ao abrir ${tabType === 'view' ? 'view' : 'tabela'}: ${err.message}`, 'error');
-    } finally {
-      setIsLoading(false);
+    await loadTableDataForTab(tabId, tableName, targetConnId);
+  };
+
+  const handleTabClick = async (tab: TabItem) => {
+    setActiveTabId(tab.id);
+    if (tab.tableName) {
+      setSelectedTable(tab.tableName);
+    } else {
+      setSelectedTable(null);
+    }
+
+    // Lazy load table data if it was never loaded
+    if (
+      (tab.type === 'table' || tab.type === 'view') &&
+      tab.tableName &&
+      !tab.queryResult &&
+      !tab.isLoading &&
+      activeConnection
+    ) {
+      await loadTableDataForTab(tab.id, tab.tableName, activeConnection.id);
     }
   };
 
-  const handleExecuteQuery = async (query: string) => {
+  const handleOpenNewQuery = () => {
+    const newId = `query_${Date.now()}`;
+    const queryCount = tabs.filter(t => t.type === 'query').length;
+    const title = `Consulta SQL ${queryCount + 1}`;
+    const defaultQuery = selectedTable
+      ? `SELECT * FROM "${selectedTable}" LIMIT 100;`
+      : 'SELECT * FROM clients LIMIT 50;';
+
+    const newTab: TabItem = {
+      id: newId,
+      title,
+      type: 'query',
+      query: defaultQuery,
+      queryResult: null,
+      columnsMeta: [],
+      isLoading: false
+    };
+
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newId);
+  };
+
+  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (tabs.length === 1) return;
+    const tabIndex = tabs.findIndex(t => t.id === tabId);
+    const nextTabs = tabs.filter(t => t.id !== tabId);
+    setTabs(nextTabs);
+
+    if (activeTabId === tabId) {
+      const fallbackTab = nextTabs[Math.max(0, tabIndex - 1)] || nextTabs[0];
+      setActiveTabId(fallbackTab.id);
+      if (fallbackTab.tableName) {
+        setSelectedTable(fallbackTab.tableName);
+      } else {
+        setSelectedTable(null);
+      }
+    }
+  };
+
+  const handleQueryChange = (text: string) => {
+    setTabs(prev =>
+      prev.map(t => (t.id === activeTabId ? { ...t, query: text } : t))
+    );
+  };
+
+  const handleExecuteQuery = async (queryText: string) => {
     if (!activeConnection) {
       showToast('Conecte-se a um banco de dados primeiro.', 'error');
       return;
     }
 
-    setIsLoading(true);
+    let targetTabId = activeTabId;
+    const targetTab = tabs.find(t => t.id === targetTabId);
+
+    // If active tab is not a query tab, open a new query tab and execute there
+    if (targetTab && targetTab.type !== 'query') {
+      const newId = `query_${Date.now()}`;
+      const queryCount = tabs.filter(t => t.type === 'query').length;
+      const newTab: TabItem = {
+        id: newId,
+        title: `Consulta SQL ${queryCount + 1}`,
+        type: 'query',
+        query: queryText,
+        queryResult: null,
+        columnsMeta: [],
+        isLoading: true
+      };
+      setTabs(prev => [...prev, newTab]);
+      setActiveTabId(newId);
+      targetTabId = newId;
+    } else {
+      setTabs(prev =>
+        prev.map(t =>
+          t.id === targetTabId
+            ? { ...t, query: queryText, isLoading: true }
+            : t
+        )
+      );
+    }
+
     try {
-      const res = await safeApi.executeQuery(activeConnection.id, query);
-      setQueryResult(res);
+      const res = await safeApi.executeQuery(activeConnection.id, queryText);
+      setTabs(prev =>
+        prev.map(t =>
+          t.id === targetTabId
+            ? { ...t, queryResult: res, isLoading: false }
+            : t
+        )
+      );
       showToast(`Consulta executada: ${res.rowCount} registros em ${res.executionTimeMs}ms.`);
     } catch (err: any) {
+      setTabs(prev =>
+        prev.map(t => (t.id === targetTabId ? { ...t, isLoading: false } : t))
+      );
       showToast(`Falha na query: ${err.message}`, 'error');
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleUpdateRow = async (primaryKey: Record<string, any>, changes: Record<string, any>) => {
-    if (!activeConnection || !selectedTable) return;
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    const targetTable = currentTab?.tableName || selectedTable;
+    if (!activeConnection || !targetTable) return;
+
     try {
-      const res = await safeApi.updateRow(activeConnection.id, selectedTable, primaryKey, changes);
+      const res = await safeApi.updateRow(activeConnection.id, targetTable, primaryKey, changes);
       if (res.success) {
         showToast('Registro atualizado com sucesso (CRUD)!');
-        await handleSelectTable(selectedTable);
+        if (currentTab) {
+          await loadTableDataForTab(currentTab.id, targetTable, activeConnection.id);
+        }
       } else {
         showToast(`Erro ao atualizar: ${res.error || 'Falha'}`, 'error');
       }
@@ -204,12 +402,19 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteRow = async (primaryKey: Record<string, any>) => {
-    if (!activeConnection || !selectedTable) return;
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    const targetTable = currentTab?.tableName || selectedTable;
+    if (!activeConnection || !targetTable) return;
+
     try {
-      const res = await safeApi.deleteRow(activeConnection.id, selectedTable, primaryKey);
+      const res = await safeApi.deleteRow(activeConnection.id, targetTable, primaryKey);
       if (res.success) {
         showToast('Registro excluído com sucesso (CRUD)!');
-        await handleSelectTable(selectedTable);
+        if (currentTab) {
+          await loadTableDataForTab(currentTab.id, targetTable, activeConnection.id);
+        }
+      } else {
+        showToast(`Erro ao excluir: ${res.error || 'Falha'}`, 'error');
       }
     } catch (err: any) {
       showToast(`Erro ao excluir: ${err.message}`, 'error');
@@ -217,11 +422,22 @@ export const App: React.FC = () => {
   };
 
   const handleAddRow = async (rowData: Record<string, any>) => {
-    if (!activeConnection || !selectedTable) return;
-    const res = await safeApi.insertRow(activeConnection.id, selectedTable, rowData);
-    if (res.success) {
-      showToast('Novo registro adicionado com sucesso (CRUD)!');
-      await handleSelectTable(selectedTable);
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    const targetTable = currentTab?.tableName || selectedTable;
+    if (!activeConnection || !targetTable) return;
+
+    try {
+      const res = await safeApi.insertRow(activeConnection.id, targetTable, rowData);
+      if (res.success) {
+        showToast('Novo registro adicionado com sucesso (CRUD)!');
+        if (currentTab) {
+          await loadTableDataForTab(currentTab.id, targetTable, activeConnection.id);
+        }
+      } else {
+        showToast(`Erro ao inserir: ${res.error || 'Falha'}`, 'error');
+      }
+    } catch (err: any) {
+      showToast(`Erro ao inserir: ${err.message}`, 'error');
     }
   };
 
@@ -231,14 +447,16 @@ export const App: React.FC = () => {
       return;
     }
 
-    const defaultFilename = `${selectedTable || 'dados'}_export.${format}`;
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    const targetTable = currentTab?.tableName || selectedTable;
+    const defaultFilename = `${targetTable || 'dados'}_export.${format}`;
     const targetPath = await safeApi.saveFileDialog(defaultFilename, format);
     if (!targetPath) return;
 
     try {
       const options: ExportOptions = {
         format,
-        tableName: selectedTable || undefined,
+        tableName: targetTable || undefined,
         targetFilePath: targetPath
       };
 
@@ -248,24 +466,6 @@ export const App: React.FC = () => {
       }
     } catch (err: any) {
       showToast(`Erro na exportação: ${err.message}`, 'error');
-    }
-  };
-
-  const handleOpenNewQuery = () => {
-    const newId = `query_${Date.now()}`;
-    const queryCount = tabs.filter(t => t.type === 'query').length;
-    const title = queryCount === 0 ? 'query_1' : `query_${queryCount + 1}`;
-    setTabs(prev => [...prev, { id: newId, title, type: 'query' }]);
-    setActiveTabId(newId);
-  };
-
-  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (tabs.length === 1) return;
-    const nextTabs = tabs.filter(t => t.id !== tabId);
-    setTabs(nextTabs);
-    if (activeTabId === tabId) {
-      setActiveTabId(nextTabs[0].id);
     }
   };
 
@@ -311,7 +511,7 @@ export const App: React.FC = () => {
         activeConnection={activeConnection}
         onOpenNewConnection={() => setIsConnectionDrawerOpen(true)}
         onRefreshSchema={handleRefreshSchema}
-        isLoading={isLoading}
+        isLoading={isLoading || currentTab?.isLoading || false}
       />
 
       {/* Main Workspace Area */}
@@ -321,7 +521,7 @@ export const App: React.FC = () => {
           activeConnection={activeConnection}
           savedConnections={savedConnections}
           tables={tables}
-          selectedTable={selectedTable}
+          selectedTable={currentTab?.tableName || selectedTable}
           onSelectTable={handleSelectTable}
           onSwitchConnection={handleConnect}
           onDisconnect={handleDisconnect}
@@ -340,10 +540,7 @@ export const App: React.FC = () => {
               return (
                 <div
                   key={tab.id}
-                  onClick={() => {
-                    setActiveTabId(tab.id);
-                    if (tab.tableName) setSelectedTable(tab.tableName);
-                  }}
+                  onClick={() => handleTabClick(tab)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
                     isActive
                       ? 'bg-[#0C1818] text-[#00F566] border border-[#1E3B3A] shadow-sm'
@@ -379,6 +576,7 @@ export const App: React.FC = () => {
                     <button
                       onClick={e => handleCloseTab(tab.id, e)}
                       className="hover:opacity-75 p-0.5 rounded-full text-[#8EA8A3] hover:text-white"
+                      title="Fechar aba"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -401,8 +599,10 @@ export const App: React.FC = () => {
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden space-y-3">
             {currentTab?.type === 'query' && (
               <SqlEditor
+                query={currentTab.query || ''}
+                onQueryChange={handleQueryChange}
                 onExecute={handleExecuteQuery}
-                isLoading={isLoading}
+                isLoading={currentTab.isLoading || false}
                 tableName={selectedTable || undefined}
               />
             )}
@@ -414,9 +614,9 @@ export const App: React.FC = () => {
                   ? 'Resultados da Consulta'
                   : `Tabela: ${currentTab?.tableName || selectedTable || ''}`
               }
-              queryResult={queryResult}
-              columnsMeta={columnsMeta}
-              isLoading={isLoading}
+              queryResult={currentTab?.queryResult || null}
+              columnsMeta={currentTab?.columnsMeta || []}
+              isLoading={currentTab?.isLoading || false}
               onUpdateRow={handleUpdateRow}
               onDeleteRow={handleDeleteRow}
               onOpenAddRow={() => setIsAddRowDrawerOpen(true)}
@@ -427,40 +627,40 @@ export const App: React.FC = () => {
         </main>
       </div>
 
-      {/* Floating Prompt Bar (Signature Nocra design) */}
+      {/* Floating Action Bar */}
       <FloatingPromptBar
         activeConnection={activeConnection}
         onExecuteQuery={handleExecuteQuery}
         onOpenAddRow={() => setIsAddRowDrawerOpen(true)}
         onExportCsv={() => handleExport('csv')}
         onExportExcel={() => handleExport('xlsx')}
-        isLoading={isLoading}
+        isLoading={currentTab?.isLoading || false}
       />
 
-      {/* Beekeeper Style Status Bar */}
+      {/* Status Bar */}
       <StatusBar
         activeConnection={activeConnection}
-        queryResult={queryResult}
-        isLoading={isLoading}
-        selectedTable={selectedTable}
+        queryResult={currentTab?.queryResult || null}
+        isLoading={currentTab?.isLoading || false}
+        selectedTable={currentTab?.tableName || selectedTable}
         onExportCsv={() => handleExport('csv')}
         onExportExcel={() => handleExport('xlsx')}
       />
 
-      {/* Drawers (replacing modals) */}
+      {/* Drawers */}
       <ConnectionDrawer
         isOpen={isConnectionDrawerOpen}
         onClose={() => setIsConnectionDrawerOpen(false)}
         onConnect={handleConnect}
       />
 
-      {selectedTable && (
+      {(currentTab?.tableName || selectedTable) && (
         <AddRowDrawer
           isOpen={isAddRowDrawerOpen}
           onClose={() => setIsAddRowDrawerOpen(false)}
-          tableName={selectedTable}
-          columns={queryResult?.columns || []}
-          columnsMeta={columnsMeta}
+          tableName={currentTab?.tableName || selectedTable || ''}
+          columns={currentTab?.queryResult?.columns || []}
+          columnsMeta={currentTab?.columnsMeta || []}
           onSave={handleAddRow}
         />
       )}

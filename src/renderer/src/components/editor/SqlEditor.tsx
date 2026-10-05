@@ -1,27 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Play, Copy, Trash2, Check, Terminal } from 'lucide-react';
 
 interface SqlEditorProps {
-  initialQuery?: string;
+  query: string;
+  onQueryChange: (query: string) => void;
   onExecute: (query: string) => void;
   isLoading: boolean;
   tableName?: string;
 }
 
 export const SqlEditor: React.FC<SqlEditorProps> = ({
-  initialQuery = 'SELECT * FROM clients LIMIT 50;',
+  query,
+  onQueryChange,
   onExecute,
-  isLoading,
-  tableName
+  isLoading
 }) => {
-  const [query, setQuery] = useState(initialQuery);
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (tableName) {
-      setQuery(`SELECT * FROM "${tableName}" LIMIT 100;`);
-    }
-  }, [tableName]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -37,7 +31,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
   };
 
   const insertSnippet = (snippet: string) => {
-    setQuery(prev => prev + (prev.endsWith(' ') || prev === '' ? '' : ' ') + snippet);
+    onQueryChange(query + (query.endsWith(' ') || query === '' ? '' : ' ') + snippet);
   };
 
   return (
@@ -63,11 +57,11 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
         </div>
       </div>
 
-      {/* Code Textarea */}
+      {/* Code Textarea - Controlled by Tab State */}
       <div className="relative flex-1 min-h-[110px] max-h-[200px]">
         <textarea
           value={query}
-          onChange={e => setQuery(e.target.value)}
+          onChange={e => onQueryChange(e.target.value)}
           onKeyDown={handleKeyDown}
           spellCheck={false}
           className="w-full h-full min-h-[110px] bg-transparent text-slate-100 font-mono text-xs leading-relaxed resize-none focus:outline-none placeholder-[#64837E]"
@@ -87,7 +81,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
           </button>
 
           <button
-            onClick={() => setQuery('')}
+            onClick={() => onQueryChange('')}
             className="px-3 py-1.5 rounded-lg bg-[#183434] hover:bg-[#1E3B3A] border border-[#1E3B3A] text-[#8EA8A3] hover:text-rose-400 text-xs flex items-center gap-1.5 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
