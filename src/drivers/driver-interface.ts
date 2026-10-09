@@ -14,6 +14,7 @@ export interface DatabaseDriver {
   connect(config: ConnectionConfig): Promise<ConnectionResult>;
   disconnect(): Promise<void>;
   testConnection(config: ConnectionConfig): Promise<{ success: boolean; message?: string }>;
+  listDatabases?(config?: ConnectionConfig): Promise<string[]>;
   listTables(): Promise<TableInfo[]>;
   describeTable(tableName: string): Promise<ColumnInfo[]>;
   executeQuery(query: string, options?: QueryOptions): Promise<QueryResult>;

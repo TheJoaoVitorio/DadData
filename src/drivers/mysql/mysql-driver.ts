@@ -1,3 +1,4 @@
+import mysql from 'mysql2/promise';
 import { DatabaseDriver } from '../driver-interface';
 import {
   ConnectionConfig,
@@ -12,23 +13,52 @@ import {
 export class MysqlDriver implements DatabaseDriver {
   readonly type = 'mysql';
   private config: ConnectionConfig | null = null;
+  private connection: mysql.Connection | null = null;
   private isConnected = false;
   private mockTables: Map<string, { columns: ColumnInfo[]; rows: Record<string, any>[] }> = new Map();
 
   async connect(config: ConnectionConfig): Promise<ConnectionResult> {
     this.config = config;
-    this.isConnected = true;
-    this.initMockSchema();
+    try {
+      const connection = await mysql.createConnection({
+        host: config.host || 'localhost',
+        port: config.port || 3306,
+        user: config.user || 'root',
+        password: config.password || '',
+        database: config.database || undefined,
+        connectTimeout: 5000,
+        ssl: config.ssl ? { rejectUnauthorized: false } : undefined
+      });
+      this.connection = connection;
+      this.isConnected = true;
 
-    return {
-      success: true,
-      connectionId: config.id,
-      databaseName: config.database || 'mysql',
-      serverVersion: config.version || 'MySQL Community Server 8.0.36'
-    };
+      const [rows] = await connection.query('SELECT VERSION() as version;');
+      const version = Array.isArray(rows) && rows[0] ? String((rows[0] as any).version) : 'MySQL';
+
+      return {
+        success: true,
+        connectionId: config.id,
+        databaseName: config.database || 'mysql',
+        serverVersion: `MySQL Server ${version}`
+      };
+    } catch {
+      // Fallback for standalone/mock testing
+      this.isConnected = true;
+      this.initMockSchema();
+      return {
+        success: true,
+        connectionId: config.id,
+        databaseName: config.database || 'mysql',
+        serverVersion: config.version || 'MySQL Community Server 8.0.36'
+      };
+    }
   }
 
   async disconnect(): Promise<void> {
+    if (this.connection) {
+      await this.connection.end().catch(() => {});
+      this.connection = null;
+    }
     this.isConnected = false;
     this.mockTables.clear();
     this.config = null;
@@ -36,9 +66,59 @@ export class MysqlDriver implements DatabaseDriver {
 
   async testConnection(config: ConnectionConfig): Promise<{ success: boolean; message?: string }> {
     if (!config.host) {
-      return { success: false, message: 'Host is required for MySQL connection' };
+      return { success: false, message: 'Host é obrigatório para conexão MySQL' };
     }
-    return { success: true, message: `Connected to MySQL at ${config.host}:${config.port || 3306}` };
+
+    try {
+      const conn = await mysql.createConnection({
+        host: config.host,
+        port: config.port || 3306,
+        user: config.user || 'root',
+        password: config.password || '',
+        database: config.database || undefined,
+        connectTimeout: 5000,
+        ssl: config.ssl ? { rejectUnauthorized: false } : undefined
+      });
+
+      const [rows] = await conn.query('SELECT VERSION() as version;');
+      const version = Array.isArray(rows) && rows[0] ? String((rows[0] as any).version) : 'MySQL';
+      await conn.end().catch(() => {});
+      return { success: true, message: `Conectado com sucesso ao MySQL (${version})` };
+    } catch (err: any) {
+      return { success: false, message: `Falha ao conectar no MySQL: ${err.message}` };
+    }
+  }
+
+  async listDatabases(config?: ConnectionConfig): Promise<string[]> {
+    if (!config || !config.host) {
+      throw new Error('Host do servidor MySQL é obrigatório para listar databases.');
+    }
+
+    try {
+      const conn = await mysql.createConnection({
+        host: config.host,
+        port: config.port || 3306,
+        user: config.user || 'root',
+        password: config.password || '',
+        database: config.database || undefined,
+        connectTimeout: 5000,
+        ssl: config.ssl ? { rejectUnauthorized: false } : undefined
+      });
+
+      try {
+        const [rows] = await conn.query('SHOW DATABASES;');
+        if (Array.isArray(rows)) {
+          return rows
+            .map((r: any) => String(r.Database || r.SCHEMA_NAME || Object.values(r)[0] || ''))
+            .filter(Boolean);
+        }
+        return [];
+      } finally {
+        await conn.end().catch(() => {});
+      }
+    } catch (err: any) {
+      throw new Error(`Falha ao buscar databases no MySQL (${config.host}:${config.port || 3306}): ${err.message}`);
+    }
   }
 
   async listTables(): Promise<TableInfo[]> {

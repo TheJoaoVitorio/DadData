@@ -27,6 +27,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // 2. Metadata & Schema
+  ipcMain.handle(IPC_CHANNELS.DB_LIST_DATABASES, async (_event, config: ConnectionConfig) => {
+    return driverManager.listDatabases(config);
+  });
+
   ipcMain.handle(IPC_CHANNELS.DB_LIST_TABLES, async (_event, connectionId: string) => {
     return driverManager.listTables(connectionId);
   });
@@ -113,14 +117,32 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       let rows: Record<string, any>[] = [];
       let columns: string[] = [];
 
-      if (options.query) {
+      // Priority 1: Direct in-memory data (instant export of query results displayed to the user)
+      if (options.rows && options.rows.length > 0) {
+        rows = options.rows;
+        columns =
+          options.columns && options.columns.length > 0
+            ? options.columns
+            : Object.keys(rows[0] || {});
+      } else if (options.query) {
+        // Priority 2: Re-execute query via driver manager
         const queryRes = await driverManager.executeQuery(connectionId, options.query);
         rows = queryRes.rows;
         columns = queryRes.columns;
       } else if (options.tableName) {
-        const queryRes = await driverManager.executeQuery(connectionId, `SELECT * FROM "${options.tableName}"`);
+        // Priority 3: Fetch table data
+        const config = driverManager.getActiveConnectionConfig(connectionId);
+        let q = `SELECT * FROM "${options.tableName}"`;
+        if (config?.type === 'mongodb') {
+          q = `db.${options.tableName}.find()`;
+        }
+        const queryRes = await driverManager.executeQuery(connectionId, q);
         rows = queryRes.rows;
         columns = queryRes.columns;
+      }
+
+      if (rows.length === 0 && columns.length === 0) {
+        throw new Error('Nenhum registro encontrado para exportar.');
       }
 
       if (options.format === 'csv') {

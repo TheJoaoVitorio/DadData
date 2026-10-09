@@ -22,7 +22,7 @@
 body {
   margin: 0;
   padding: 0;
-  background-color: #F8FAF9;
+  background-color: #FACC15;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -66,4 +66,28 @@ body {
 .abacate-dot-grid {
   background-image: radial-gradient(rgba(20, 41, 41, 0.06) 1px, transparent 1px);
   background-size: 16px 16px;
+}
+
+/* Magic UI Animations */
+@keyframes border-beam {
+  100% {
+    offset-distance: 100%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s infinite linear;
+}
+
+.animate-border-beam {
+  animation: border-beam var(--duration, 15s) infinite linear;
 }

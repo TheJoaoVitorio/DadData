@@ -10,6 +10,7 @@ export const api = {
   getActiveConnections: () => ipcRenderer.invoke(IPC_CHANNELS.DB_GET_ACTIVE_CONNECTIONS),
 
   // Metadata
+  listDatabases: (config: ConnectionConfig) => ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_DATABASES, config),
   listTables: (connectionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_TABLES, connectionId),
   describeTable: (connectionId: string, tableName: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.DB_DESCRIBE_TABLE, connectionId, tableName),

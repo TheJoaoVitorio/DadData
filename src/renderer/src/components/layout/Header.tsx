@@ -17,26 +17,11 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading
 }) => {
   return (
-    <header className="h-14 px-6 flex items-center justify-between z-10 border-b border-zinc-200/80 bg-white">
-      {/* Brand & Logo - AbacatePay Minimalist Style */}
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center p-1.5 transition-transform hover:scale-105 shadow-sm">
-          {/* Avocado with warm golden seed */}
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-            <path
-              d="M12 2.5C8 2.5 5 7 5 12.5C5 18 8 21.5 12 21.5C16 21.5 19 18 19 12.5C19 7 16 2.5 12 2.5Z"
-              stroke="#18181B"
-              strokeWidth="1.8"
-              strokeLinejoin="round"
-            />
-            <circle cx="12" cy="14" r="3.2" fill="#FACC15" stroke="#18181B" strokeWidth="1.4" />
-            <path d="M12 2.5V5" stroke="#18181B" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xl font-bold tracking-tight text-zinc-900 font-sans">DadData</span>
-        </div>
+    <header className="h-14 px-6 flex items-center justify-between z-10 bg-transparent flex-shrink-0">
+      {/* Page title — sits above the rounded white sheet */}
+      <div className="flex items-center gap-2.5">
+        <Database className="w-4 h-4 text-zinc-500" />
+        <span className="text-[15px] font-semibold tracking-tight text-zinc-800">Workspace</span>
       </div>
 
       {/* Active Database Badge Pill */}

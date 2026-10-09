@@ -92,6 +92,8 @@ export interface ExportOptions {
   format: 'csv' | 'xlsx';
   tableName?: string;
   query?: string;
+  columns?: string[];
+  rows?: Record<string, any>[];
   delimiter?: ',' | ';' | '\t';
   includeHeaders?: boolean;
   sheetName?: string;

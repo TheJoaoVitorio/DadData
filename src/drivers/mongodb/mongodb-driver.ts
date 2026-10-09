@@ -1,3 +1,4 @@
+import { MongoClient } from 'mongodb';
 import { DatabaseDriver } from '../driver-interface';
 import {
   ConnectionConfig,
@@ -35,7 +36,43 @@ export class MongodbDriver implements DatabaseDriver {
   }
 
   async testConnection(config: ConnectionConfig): Promise<{ success: boolean; message?: string }> {
-    return { success: true, message: `MongoDB connection uri verified for ${config.host || 'localhost'}` };
+    const host = config?.host || 'localhost';
+    const port = config?.port || 27017;
+    let uri = `mongodb://${host}:${port}`;
+    if (config?.user && config?.password) {
+      uri = `mongodb://${encodeURIComponent(config.user)}:${encodeURIComponent(config.password)}@${host}:${port}`;
+    }
+
+    const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+    try {
+      await client.connect();
+      await client.db('admin').command({ ping: 1 });
+      await client.close();
+      return { success: true, message: `Conectado com sucesso ao MongoDB em ${host}:${port}` };
+    } catch (err: any) {
+      return { success: false, message: `Falha ao conectar no MongoDB: ${err.message}` };
+    }
+  }
+
+  async listDatabases(config?: ConnectionConfig): Promise<string[]> {
+    const host = config?.host || 'localhost';
+    const port = config?.port || 27017;
+    let uri = `mongodb://${host}:${port}`;
+    if (config?.user && config?.password) {
+      uri = `mongodb://${encodeURIComponent(config.user)}:${encodeURIComponent(config.password)}@${host}:${port}`;
+    }
+
+    const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+    try {
+      await client.connect();
+      const adminDb = client.db().admin();
+      const result = await adminDb.listDatabases();
+      return result.databases.map(d => d.name);
+    } catch (err: any) {
+      throw new Error(`Falha ao buscar databases do MongoDB (${host}:${port}): ${err.message}`);
+    } finally {
+      await client.close().catch(() => {});
+    }
   }
 
   async listTables(): Promise<TableInfo[]> {

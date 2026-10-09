@@ -263,7 +263,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-80 bg-white text-zinc-700 rounded-3xl flex overflow-hidden shadow-sm border border-zinc-200/90 select-none z-10">
+    <aside className="w-[272px] bg-white text-zinc-700 flex overflow-hidden border-r border-zinc-200/70 select-none z-10 flex-shrink-0">
       {/* 1. Leftmost Activity Rail (Clean Soft Neutral) */}
       <div className="w-11 bg-zinc-50/80 flex flex-col items-center py-3 border-r border-zinc-200/80 space-y-3 flex-shrink-0">
         {/* Explorer icon */}
@@ -323,6 +323,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* 2. Main Sidebar Explorer Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white">
+        {/* Brand — AbacatePay-style logo in the sidebar */}
+        <div className="px-3 pt-3 pb-1 flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center p-1.5 shadow-sm">
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
+              <path
+                d="M12 2.5C8 2.5 5 7 5 12.5C5 18 8 21.5 12 21.5C16 21.5 19 18 19 12.5C19 7 16 2.5 12 2.5Z"
+                stroke="#18181B"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+              <circle cx="12" cy="14" r="3.2" fill="#FACC15" stroke="#18181B" strokeWidth="1.4" />
+              <path d="M12 2.5V5" stroke="#18181B" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </div>
+          <span className="text-lg font-bold tracking-tight text-zinc-900">DadData</span>
+        </div>
+
         {/* Header with Connection Dropdown */}
         <div className="p-3 border-b border-zinc-200/80 relative">
           <div className="flex items-center justify-between gap-1.5">

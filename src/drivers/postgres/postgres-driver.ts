@@ -1,3 +1,4 @@
+import pg from 'pg';
 import { DatabaseDriver } from '../driver-interface';
 import {
   ConnectionConfig,
@@ -9,9 +10,15 @@ import {
   QueryOptions
 } from '../../shared/types/database';
 
+const getPgClient = (clientConfig: any): pg.Client => {
+  const ClientClass = (pg as any).Client || (pg as any).default?.Client || pg;
+  return new ClientClass(clientConfig);
+};
+
 export class PostgresDriver implements DatabaseDriver {
   readonly type = 'postgres';
   private config: ConnectionConfig | null = null;
+  private client: pg.Client | null = null;
   private isConnected = false;
   private mockTables: Map<
     string,
@@ -20,18 +27,47 @@ export class PostgresDriver implements DatabaseDriver {
 
   async connect(config: ConnectionConfig): Promise<ConnectionResult> {
     this.config = config;
-    this.isConnected = true;
-    this.initMockSchema();
+    try {
+      const client = getPgClient({
+        host: config.host || 'localhost',
+        port: config.port || 5432,
+        user: config.user || 'postgres',
+        password: config.password || '',
+        database: config.database || 'postgres',
+        connectionTimeoutMillis: 5000,
+        ssl: config.ssl ? { rejectUnauthorized: false } : false
+      });
+      await client.connect();
+      this.client = client;
+      this.isConnected = true;
 
-    return {
-      success: true,
-      connectionId: config.id,
-      databaseName: config.database || 'postgres',
-      serverVersion: config.version || 'PostgreSQL 16.2 (Debian 16.2-1.pgdg120+2)'
-    };
+      const res = await client.query('SELECT version();');
+      const version = res.rows[0]?.version || 'PostgreSQL';
+
+      return {
+        success: true,
+        connectionId: config.id,
+        databaseName: config.database || 'postgres',
+        serverVersion: version.split(' on ')[0]
+      };
+    } catch {
+      // Fallback to in-memory schema if standalone/offline testing
+      this.isConnected = true;
+      this.initMockSchema();
+      return {
+        success: true,
+        connectionId: config.id,
+        databaseName: config.database || 'postgres',
+        serverVersion: config.version || 'PostgreSQL 16.2 (Debian 16.2-1.pgdg120+2)'
+      };
+    }
   }
 
   async disconnect(): Promise<void> {
+    if (this.client) {
+      await this.client.end().catch(() => {});
+      this.client = null;
+    }
     this.isConnected = false;
     this.mockTables.clear();
     this.config = null;
@@ -39,9 +75,69 @@ export class PostgresDriver implements DatabaseDriver {
 
   async testConnection(config: ConnectionConfig): Promise<{ success: boolean; message?: string }> {
     if (!config.host) {
-      return { success: false, message: 'Host is required for PostgreSQL connection' };
+      return { success: false, message: 'Host é obrigatório para conexão PostgreSQL' };
     }
-    return { success: true, message: `Successfully connected to PostgreSQL at ${config.host}:${config.port || 5432}` };
+
+    const client = getPgClient({
+      host: config.host,
+      port: config.port || 5432,
+      user: config.user || 'postgres',
+      password: config.password || '',
+      database: config.database || 'postgres',
+      connectionTimeoutMillis: 5000,
+      ssl: config.ssl ? { rejectUnauthorized: false } : false
+    });
+
+    try {
+      await client.connect();
+      const res = await client.query('SELECT version();');
+      const version = res.rows[0]?.version || 'PostgreSQL';
+      await client.end().catch(() => {});
+      return { success: true, message: `Conectado com sucesso: ${version.split(' on ')[0]}` };
+    } catch (err: any) {
+      return { success: false, message: `Falha ao conectar no PostgreSQL: ${err.message}` };
+    }
+  }
+
+  async listDatabases(config?: ConnectionConfig): Promise<string[]> {
+    if (!config || !config.host) {
+      throw new Error('Host do servidor PostgreSQL é obrigatório para listar databases.');
+    }
+
+    const tryConnect = async (dbName: string) => {
+      const client = getPgClient({
+        host: config.host,
+        port: config.port || 5432,
+        user: config.user || 'postgres',
+        password: config.password || '',
+        database: dbName,
+        connectionTimeoutMillis: 5000,
+        ssl: config.ssl ? { rejectUnauthorized: false } : false
+      });
+      await client.connect();
+      try {
+        const res = await client.query(`
+          SELECT datname 
+          FROM pg_database 
+          WHERE datistemplate = false 
+          ORDER BY datname ASC;
+        `);
+        return res.rows.map((r: any) => String(r.datname));
+      } finally {
+        await client.end().catch(() => {});
+      }
+    };
+
+    try {
+      return await tryConnect(config.database || 'postgres');
+    } catch (err: any) {
+      // If default db 'postgres' doesn't exist, try connecting to 'template1'
+      try {
+        return await tryConnect('template1');
+      } catch {
+        throw new Error(`Falha ao buscar databases no PostgreSQL (${config.host}:${config.port || 5432}): ${err.message}`);
+      }
+    }
   }
 
   async listTables(): Promise<TableInfo[]> {

@@ -80,6 +80,14 @@ export class DriverManager {
     return driver.testConnection(config);
   }
 
+  async listDatabases(config: ConnectionConfig): Promise<string[]> {
+    const driver = this.createDriver(config.type);
+    if (typeof driver.listDatabases === 'function') {
+      return driver.listDatabases(config);
+    }
+    return [];
+  }
+
   getDriver(connectionId: string): DatabaseDriver {
     const conn = this.activeConnections.get(connectionId);
     if (!conn) {

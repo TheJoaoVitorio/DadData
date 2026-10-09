@@ -281,18 +281,114 @@ describe('DadData Database Drivers & Export Suite', () => {
       expect(content).toContain('Produto A ""Especial""');
     });
 
-    it('should export to Excel (.xlsx) with formatted worksheet', async () => {
-      const xlsxPath = path.join(testDir, 'export_test.xlsx');
-      const res = await ExportService.exportToExcel(columns, rows, {
-        format: 'xlsx',
-        targetFilePath: xlsxPath,
-        sheetName: 'Relatório Clientes'
+    it('should export 7,000 product rows with BigInt, nulls, and special characters to CSV', async () => {
+      const csvPath = path.join(testDir, 'export_7000_produtos.csv');
+      const productColumns = ['id', 'ean', 'descricao', 'preco', 'estoque', 'ativo', 'cadastro'];
+      const productRows: Record<string, any>[] = [];
+
+      for (let i = 1; i <= 7000; i++) {
+        productRows.push({
+          id: i,
+          ean: BigInt(7890000000000 + i), // BigInt barcode
+          descricao: `Produto Teste ${i} "Especial" & 'Qualidade'`,
+          preco: (i * 1.5).toFixed(2),
+          estoque: i % 10 === 0 ? null : i * 5,
+          ativo: i % 2 === 0,
+          cadastro: new Date('2024-01-01T10:00:00Z')
+        });
+      }
+
+      const res = await ExportService.exportToCsv(productColumns, productRows, {
+        format: 'csv',
+        targetFilePath: csvPath,
+        delimiter: ';'
       });
 
       expect(res.success).toBe(true);
-      expect(res.rowCount).toBe(3);
+      expect(res.rowCount).toBe(7000);
+      expect(fs.existsSync(csvPath)).toBe(true);
+      expect(res.fileSizeBytes).toBeGreaterThan(100000); // More than 100KB
+    });
+
+    it('should export 7,000 product rows with BigInt and invalid sheet name characters to Excel (.xlsx)', async () => {
+      const xlsxPath = path.join(testDir, 'export_7000_produtos.xlsx');
+      const productColumns = ['id', 'ean', 'descricao', 'preco', 'estoque', 'ativo'];
+      const productRows: Record<string, any>[] = [];
+
+      for (let i = 1; i <= 7000; i++) {
+        productRows.push({
+          id: i,
+          ean: BigInt(7890000000000 + i),
+          descricao: `Produto Lote ${i} - Categoria ${i % 20}`,
+          preco: Number((i * 2.35).toFixed(2)),
+          estoque: i * 10,
+          ativo: true
+        });
+      }
+
+      const res = await ExportService.exportToExcel(productColumns, productRows, {
+        format: 'xlsx',
+        targetFilePath: xlsxPath,
+        sheetName: 'Produtos / Peças: 2024* [Lote 1]' // Contains illegal Excel sheet chars: / : * [ ]
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.rowCount).toBe(7000);
       expect(fs.existsSync(xlsxPath)).toBe(true);
-      expect(res.fileSizeBytes).toBeGreaterThan(1000);
+      expect(res.fileSizeBytes).toBeGreaterThan(50000);
+    });
+  });
+
+  describe('7. Firebird Charset & Brazilian Accents Decoding (WIN1252)', () => {
+    it('should correctly decode Windows-1252 buffers without replacement characters', () => {
+      // Raw Windows-1252 byte buffers as stored by ERPs (CLIPP, G10, Compufour)
+      const concordiaBuf = Buffer.from([0x43, 0x6f, 0x6e, 0x63, 0xf3, 0x72, 0x64, 0x69, 0x61]); // Concórdia (0xf3 = ó)
+      const joaoPessoaBuf = Buffer.from([0x4a, 0x6f, 0xe3, 0x6f, 0x20, 0x50, 0x65, 0x73, 0x73, 0x6f, 0x61]); // João Pessoa (0xe3 = ã)
+      const saoPauloBuf = Buffer.from([0x53, 0xe3, 0x6f, 0x20, 0x50, 0x61, 0x75, 0x6c, 0x6f]); // São Paulo (0xe3 = ã)
+
+      // Demonstrating that utf8 corrupts it into replacement chars:
+      expect(concordiaBuf.toString('utf8')).toContain('\uFFFD');
+      expect(joaoPessoaBuf.toString('utf8')).toContain('\uFFFD');
+      expect(saoPauloBuf.toString('utf8')).toContain('\uFFFD');
+
+      // Demonstrating that latin1/WIN1252 decodes it cleanly:
+      expect(concordiaBuf.toString('latin1')).toBe('Concórdia');
+      expect(joaoPessoaBuf.toString('latin1')).toBe('João Pessoa');
+      expect(saoPauloBuf.toString('latin1')).toBe('São Paulo');
+    });
+  });
+
+  describe('8. Real Server Databases Listing Validation', () => {
+    it('should validate host requirement and reject with network errors instead of fake mocks', async () => {
+      // Missing host must reject
+      await expect(
+        driverManager.listDatabases({
+          id: 'test-no-host',
+          name: 'No Host',
+          type: 'postgres'
+        })
+      ).rejects.toThrow();
+
+      // Real network call to offline port must reject with connection error rather than returning fake mock data
+      await expect(
+        driverManager.listDatabases({
+          id: 'test-pg-offline',
+          name: 'PG Offline',
+          type: 'postgres',
+          host: '127.0.0.1',
+          port: 59998
+        })
+      ).rejects.toThrow();
+
+      await expect(
+        driverManager.listDatabases({
+          id: 'test-mysql-offline',
+          name: 'MySQL Offline',
+          type: 'mysql',
+          host: '127.0.0.1',
+          port: 59998
+        })
+      ).rejects.toThrow();
     });
   });
 });

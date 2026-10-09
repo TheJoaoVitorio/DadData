@@ -1,3 +1,4 @@
+import { Connection, Request, ConnectionConfiguration } from 'tedious';
 import { DatabaseDriver } from '../driver-interface';
 import {
   ConnectionConfig,
@@ -36,9 +37,106 @@ export class MssqlDriver implements DatabaseDriver {
 
   async testConnection(config: ConnectionConfig): Promise<{ success: boolean; message?: string }> {
     if (!config.host) {
-      return { success: false, message: 'Server Host/Instance required' };
+      return { success: false, message: 'Host do servidor SQL Server é obrigatório' };
     }
-    return { success: true, message: `Connected to SQL Server instance at ${config.host}` };
+
+    return new Promise((resolve) => {
+      const connectionConfig: ConnectionConfiguration = {
+        server: config.host!,
+        authentication: {
+          type: 'default' as const,
+          options: {
+            userName: config.user || 'sa',
+            password: config.password || ''
+          }
+        },
+        options: {
+          port: config.port || 1433,
+          database: config.database || 'master',
+          connectTimeout: 5000,
+          trustServerCertificate: true,
+          encrypt: !!config.ssl
+        }
+      };
+
+      const connection = new Connection(connectionConfig);
+
+      connection.on('connect', (err) => {
+        if (err) {
+          resolve({ success: false, message: `Falha ao conectar no SQL Server: ${err.message}` });
+        } else {
+          connection.close();
+          resolve({ success: true, message: `Conectado com sucesso ao SQL Server em ${config.host}` });
+        }
+      });
+
+      connection.on('error', (err) => {
+        resolve({ success: false, message: `Falha no SQL Server: ${err.message}` });
+      });
+
+      connection.connect();
+    });
+  }
+
+  async listDatabases(config?: ConnectionConfig): Promise<string[]> {
+    if (!config || !config.host) {
+      throw new Error('Host do servidor SQL Server é obrigatório para listar databases.');
+    }
+
+    return new Promise((resolve, reject) => {
+      const connectionConfig: ConnectionConfiguration = {
+        server: config.host!,
+        authentication: {
+          type: 'default' as const,
+          options: {
+            userName: config.user || 'sa',
+            password: config.password || ''
+          }
+        },
+        options: {
+          port: config.port || 1433,
+          database: config.database || 'master',
+          connectTimeout: 5000,
+          trustServerCertificate: true,
+          encrypt: !!config.ssl
+        }
+      };
+
+      const connection = new Connection(connectionConfig);
+
+      connection.on('connect', (err) => {
+        if (err) {
+          return reject(new Error(`Falha ao conectar ao SQL Server (${config.host}:${config.port || 1433}): ${err.message}`));
+        }
+
+        const databases: string[] = [];
+        const request = new Request(
+          `SELECT name FROM sys.databases WHERE name NOT IN ('model', 'tempdb') ORDER BY name ASC;`,
+          (requestErr) => {
+            connection.close();
+            if (requestErr) {
+              return reject(new Error(`Erro ao listar databases do SQL Server: ${requestErr.message}`));
+            }
+            resolve(databases);
+          }
+        );
+
+        request.on('row', (columns: any[]) => {
+          const nameCol = columns.find((c: any) => c.metadata.colName.toLowerCase() === 'name');
+          if (nameCol && nameCol.value) {
+            databases.push(String(nameCol.value));
+          }
+        });
+
+        connection.execSql(request);
+      });
+
+      connection.on('error', (err) => {
+        reject(new Error(`Falha no SQL Server (${config.host}): ${err.message}`));
+      });
+
+      connection.connect();
+    });
   }
 
   async listTables(): Promise<TableInfo[]> {
