@@ -11,6 +11,10 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import { QueryResult, ColumnInfo } from '@shared/types/database';
+import { NumberTicker } from '../magicui/number-ticker';
+import { MagicCard } from '../magicui/magic-card';
+import { DotPattern } from '../magicui/dot-pattern';
+import { AnimatedGradientText } from '../magicui/animated-gradient-text';
 
 interface DataGridProps {
   title: string;
@@ -45,19 +49,36 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-400">
-        <div className="w-8 h-8 border-3 border-zinc-200 border-t-[#FACC15] rounded-full animate-spin mb-3" />
-        <p className="text-xs font-semibold text-zinc-800">Carregando dados da tabela...</p>
+      <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-400 select-none">
+        <div className="relative w-12 h-12 mb-3.5">
+          <div className="absolute inset-0 rounded-full border-2 border-amber-400/30 animate-ping" />
+          <div className="w-12 h-12 border-3 border-zinc-200 border-t-[#FACC15] rounded-full animate-spin" />
+        </div>
+        <AnimatedGradientText className="text-xs font-bold mb-1">
+          <span>Carregando dados da tabela...</span>
+        </AnimatedGradientText>
+        <p className="text-[11px] text-zinc-400 mt-0.5">Executando consulta e indexando colunas</p>
       </div>
     );
   }
 
   if (!queryResult || queryResult.columns.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-400">
-        <FileSpreadsheet className="w-12 h-12 mb-3 text-zinc-300 stroke-1" />
-        <p className="text-sm font-bold text-zinc-800">Nenhum dado para exibir</p>
-        <p className="text-xs text-zinc-500 mt-1">Selecione uma tabela à esquerda ou execute uma consulta SQL.</p>
+      <div className="relative flex-1 flex flex-col items-center justify-center p-6 select-none overflow-hidden">
+        <DotPattern className="opacity-30" />
+        <MagicCard
+          gradientColor="#FACC15"
+          gradientSize={240}
+          className="max-w-sm p-7 flex flex-col items-center text-center shadow-lg border-zinc-200/80 rounded-3xl bg-white/90 backdrop-blur-xs"
+        >
+          <div className="w-12 h-12 rounded-2xl bg-amber-100/80 border border-amber-300 text-amber-700 flex items-center justify-center mb-3 shadow-xs">
+            <FileSpreadsheet className="w-6 h-6 stroke-[1.8]" />
+          </div>
+          <h3 className="text-sm font-bold text-zinc-900 mb-1">Nenhum dado para exibir</h3>
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            Selecione uma tabela à esquerda ou execute uma consulta SQL para visualizar os dados no grid.
+          </p>
+        </MagicCard>
       </div>
     );
   }
@@ -156,13 +177,13 @@ export const DataGrid: React.FC<DataGridProps> = ({
       <div className="flex items-center justify-between pb-2 mb-1.5 border-b border-zinc-200/80 flex-shrink-0">
         <div className="flex items-center gap-2.5">
           <h2 className="text-base font-bold tracking-tight text-zinc-900">{title}</h2>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-300/80">
-            {totalRows} registros
+          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-300/80 flex items-center gap-1 shadow-xs">
+            <NumberTicker value={totalRows} /> registros
           </span>
           {queryResult.executionTimeMs !== undefined && (
             <span className="text-[11px] font-mono text-zinc-500 flex items-center gap-1">
               <Clock className="w-3 h-3 text-amber-500" />
-              {queryResult.executionTimeMs}ms
+              <NumberTicker value={queryResult.executionTimeMs} />ms
             </span>
           )}
         </div>

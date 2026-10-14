@@ -7,6 +7,8 @@ import { AddRowDrawer } from './components/grid/AddRowDrawer';
 import { FloatingAiButton } from './components/layout/FloatingAiButton';
 import { StatusBar } from './components/layout/StatusBar';
 import { DatabaseIcon } from './components/icons/DatabaseIcon';
+import { ShinyButton } from './components/magicui/shiny-button';
+import { DotPattern } from './components/magicui/dot-pattern';
 
 import {
   ConnectionConfig,
@@ -546,12 +548,15 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Yellow top bar — AbacatePay signature header with connection switcher */}
-      <header className="h-12 flex-shrink-0 px-5 flex items-center justify-between gap-4 text-zinc-950 select-none whitespace-nowrap">
+      {/* Yellow top bar — Magic UI textured header with connection switcher */}
+      <header className="relative h-12 flex-shrink-0 px-5 flex items-center justify-between gap-4 text-zinc-950 select-none whitespace-nowrap overflow-hidden">
+        {/* Subtle Magic UI Dot Pattern texture */}
+        <DotPattern className="opacity-15 pointer-events-none" />
+
         {/* Left: Brand Logo & Status */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-zinc-950 flex items-center justify-center p-1 shadow-xs">
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+        <div className="relative z-10 flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-zinc-950 flex items-center justify-center p-1 shadow-xs group">
+            <svg viewBox="0 0 24 24" className="w-4 h-4 group-hover:scale-105 transition-transform" fill="none">
               <path
                 d="M12 2.5C8 2.5 5 7 5 12.5C5 18 8 21.5 12 21.5C16 21.5 19 18 19 12.5C19 7 16 2.5 12 2.5Z"
                 stroke="#FACC15"
@@ -569,9 +574,13 @@ export const App: React.FC = () => {
           )}
         </div>
 
-        {/* Center: Active Connection Badge & Switcher */}
+        {/* Center: Active Connection Badge & Switcher with Ping indicator */}
         {activeConnection ? (
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/60 hover:bg-white/80 border border-zinc-950/15 backdrop-blur-xs transition-all shadow-xs">
+          <div className="relative z-10 flex items-center gap-2 px-3 py-1 rounded-full bg-white/70 hover:bg-white/90 border border-zinc-950/15 backdrop-blur-xs transition-all shadow-xs">
+            <span className="relative flex h-2 w-2 mr-0.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
             <DatabaseIcon type={activeConnection.type} className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="text-xs font-bold text-zinc-950 max-w-[240px] truncate">{activeConnection.name}</span>
             <span className="text-[9px] uppercase px-1.5 py-0.2 rounded-full font-mono font-extrabold bg-zinc-950 text-amber-300">
@@ -581,24 +590,25 @@ export const App: React.FC = () => {
               onClick={handleRefreshSchema}
               disabled={isLoading || currentTab?.isLoading}
               title="Recarregar Esquema e Tabelas"
-              className="p-1 hover:bg-black/10 rounded-full transition-colors text-zinc-800"
+              className="p-1 hover:bg-black/10 rounded-full transition-colors text-zinc-800 cursor-pointer"
             >
               <RefreshCw className={`w-3 h-3 ${isLoading || currentTab?.isLoading ? 'animate-spin text-zinc-950' : ''}`} />
             </button>
           </div>
         ) : (
-          <span className="text-xs font-semibold text-zinc-800/80">Nenhum banco de dados conectado</span>
+          <span className="relative z-10 text-xs font-semibold text-zinc-800/80">Nenhum banco de dados conectado</span>
         )}
 
-        {/* Right: New Connection Button */}
-        <div className="flex items-center gap-2">
-          <button
+        {/* Right: New Connection Button with Magic UI ShinyButton */}
+        <div className="relative z-10 flex items-center gap-2">
+          <ShinyButton
+            type="button"
             onClick={() => setIsConnectionDrawerOpen(true)}
-            className="h-7.5 px-3.5 rounded-full bg-zinc-950 hover:bg-zinc-850 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
+            className="h-8 px-4 py-0 rounded-full bg-zinc-950 hover:bg-zinc-900 text-white text-xs font-bold flex items-center gap-1.5 shadow-md border-0"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>Nova Conexão</span>
-          </button>
+          </ShinyButton>
         </div>
       </header>
 
@@ -622,7 +632,7 @@ export const App: React.FC = () => {
 
         {/* Right column */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#F4F6F8] pt-3">
-          <main className="flex-1 mx-3 mb-2 bg-white rounded-2xl p-3 shadow-xs border border-zinc-200/80 flex flex-col min-h-0 overflow-hidden">
+          <main className="relative flex-1 mx-3 mb-2 bg-white rounded-3xl p-3.5 shadow-sm border border-zinc-200/90 flex flex-col min-h-0 overflow-hidden">
           {/* Tabs Bar */}
           <div className="flex items-center gap-1.5 pb-2 mb-2 border-b border-zinc-200/80 flex-shrink-0 select-none overflow-x-auto">
             {tabs.map(tab => {
@@ -631,10 +641,10 @@ export const App: React.FC = () => {
                 <div
                   key={tab.id}
                   onClick={() => handleTabClick(tab)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 cursor-pointer transition-all select-none ${
                     isActive
-                      ? 'bg-[#FACC15] text-zinc-950 border border-amber-400 shadow-xs'
-                      : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700'
+                      ? 'bg-[#FACC15] text-zinc-950 border border-amber-400 shadow-xs ring-1 ring-amber-400/30'
+                      : 'bg-zinc-100/90 hover:bg-zinc-200/90 text-zinc-700'
                   }`}
                 >
                   {tab.type === 'query' ? (
@@ -665,7 +675,7 @@ export const App: React.FC = () => {
                   {tabs.length > 1 && (
                     <button
                       onClick={e => handleCloseTab(tab.id, e)}
-                      className="hover:opacity-75 p-0.5 rounded-full text-zinc-500 hover:text-zinc-950"
+                      className="hover:opacity-75 p-0.5 rounded-full text-zinc-500 hover:text-zinc-950 cursor-pointer"
                       title="Fechar aba"
                     >
                       <X className="w-3 h-3" />
@@ -678,7 +688,7 @@ export const App: React.FC = () => {
             {/* New Tab Button */}
             <button
               onClick={handleOpenNewQuery}
-              className="p-1.5 rounded-xl hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-colors"
+              className="p-1.5 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer"
               title="Nova Consulta SQL (Ctrl+N)"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />

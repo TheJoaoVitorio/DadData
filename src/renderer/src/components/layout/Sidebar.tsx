@@ -24,6 +24,8 @@ import {
 import { TableInfo, ConnectionConfig, ColumnInfo } from '@shared/types/database';
 import { DatabaseIcon } from '../icons/DatabaseIcon';
 import { safeApi } from '../../services/api-client';
+import { ShinyButton } from '../magicui/shiny-button';
+import { NumberTicker } from '../magicui/number-ticker';
 
 interface SidebarProps {
   activeConnection: ConnectionConfig | null;
@@ -323,21 +325,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* 2. Main Sidebar Explorer Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white">
-        {/* Brand — AbacatePay-style logo in the sidebar */}
-        <div className="px-3 pt-3 pb-1 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center p-1.5 shadow-sm">
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-              <path
-                d="M12 2.5C8 2.5 5 7 5 12.5C5 18 8 21.5 12 21.5C16 21.5 19 18 19 12.5C19 7 16 2.5 12 2.5Z"
-                stroke="#18181B"
-                strokeWidth="1.8"
-                strokeLinejoin="round"
-              />
-              <circle cx="12" cy="14" r="3.2" fill="#FACC15" stroke="#18181B" strokeWidth="1.4" />
-              <path d="M12 2.5V5" stroke="#18181B" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
+        {/* Sidebar Title */}
+        <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-amber-100/70 border border-amber-300/80 flex items-center justify-center text-amber-900 shadow-xs">
+              <Database className="w-3.5 h-3.5 text-amber-700" />
+            </div>
+            <div>
+              <span className="text-xs font-bold tracking-tight text-zinc-900 block leading-tight">Explorador</span>
+              <span className="text-[10px] text-zinc-400 block leading-tight font-medium">Bancos & Tabelas</span>
+            </div>
           </div>
-          <span className="text-lg font-bold tracking-tight text-zinc-900">DadData</span>
+          {tables.length > 0 && (
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200/80">
+              <NumberTicker value={tables.length} /> tab
+            </span>
+          )}
         </div>
 
         {/* Header with Connection Dropdown */}
@@ -541,11 +544,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Quick Footer Action: New SQL Query Editor */}
+        {/* Quick Footer Action: New SQL Query Editor with Magic UI ShinyButton */}
         <div className="p-2.5 border-t border-zinc-200/80">
-          <button
+          <ShinyButton
+            type="button"
             onClick={onOpenNewQuery}
-            className="w-full py-1.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between transition-colors shadow-xs"
+            className="w-full py-1.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-950 text-xs font-semibold flex items-center justify-between shadow-xs transition-colors"
           >
             <span className="flex items-center gap-2">
               <span className="text-amber-600 font-mono font-bold">&lt;&gt;</span>
@@ -554,7 +558,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-200/80 text-amber-950 font-mono font-bold">
               Ctrl+N
             </span>
-          </button>
+          </ShinyButton>
         </div>
       </div>
     </aside>
