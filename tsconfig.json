@@ -17,9 +17,8 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/src/*"],
-      "@shared/*": ["src/shared/*"],
-      "@drivers/*": ["src/drivers/*"]
+      "@/*": ["src/*"],
+      "@shared/*": ["src/*"]
     }
   },
   "include": ["src/**/*", "tests/**/*"],

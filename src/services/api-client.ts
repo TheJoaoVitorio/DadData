@@ -240,7 +240,7 @@ export const safeApi = {
     }
 
     // Web Fallback: download direct CSV in browser
-    if (options.rows && options.rows.length > 0) {
+    if (typeof document !== 'undefined' && options.rows && options.rows.length > 0) {
       const cols = options.columns && options.columns.length > 0 ? options.columns : Object.keys(options.rows[0]);
       const header = cols.join(',');
       const rowsLines = options.rows.map(r =>
