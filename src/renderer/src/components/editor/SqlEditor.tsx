@@ -124,7 +124,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
 
         {/* Quick Snippets */}
         <div className="flex items-center gap-1 overflow-x-auto">
-          {['SELECT *', 'WHERE', 'ORDER BY', 'COUNT(*)', 'LIMIT 100'].map(snippet => (
+          {['SELECT *', 'WHERE', 'ORDER BY', 'COUNT(*)', 'LIMIT 50', 'LIMIT 100', 'LIMIT 500'].map(snippet => (
             <button
               key={snippet}
               onClick={() => insertSnippet(snippet)}

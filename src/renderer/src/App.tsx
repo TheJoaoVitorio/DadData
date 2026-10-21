@@ -30,6 +30,8 @@ export interface TabItem {
   queryResult?: QueryResult | null;
   columnsMeta?: ColumnInfo[];
   isLoading?: boolean;
+  isLoadingMore?: boolean;
+  batchSize?: number;
 }
 
 export const App: React.FC = () => {
@@ -47,10 +49,11 @@ export const App: React.FC = () => {
       id: 'query_1',
       title: 'Consulta SQL 1',
       type: 'query',
-      query: 'SELECT * FROM clients LIMIT 50;',
+      query: 'SELECT * FROM clients;',
       queryResult: null,
       columnsMeta: [],
-      isLoading: false
+      isLoading: false,
+      batchSize: 50
     }
   ]);
   const [activeTabId, setActiveTabId] = useState<string>('query_1');
@@ -117,31 +120,142 @@ export const App: React.FC = () => {
     }
   };
 
-  // Helper to load table data and metadata into a specific tab
-  const loadTableDataForTab = async (tabId: string, tableName: string, connId: string, schema?: string) => {
+  // Helper to load table data and metadata into a specific tab (supports on-demand paging and appending)
+  const loadTableDataForTab = async (
+    tabId: string,
+    tableName: string,
+    connId: string,
+    schema?: string,
+    options?: { limit?: number; offset?: number; append?: boolean }
+  ) => {
+    const isAppend = !!options?.append;
     setTabs(prev =>
-      prev.map(t => (t.id === tabId ? { ...t, isLoading: true } : t))
+      prev.map(t =>
+        t.id === tabId
+          ? {
+              ...t,
+              isLoading: !isAppend,
+              isLoadingMore: isAppend
+            }
+          : t
+      )
     );
 
     try {
+      const currentTab = tabs.find(t => t.id === tabId);
+      const limit = options?.limit ?? currentTab?.batchSize ?? 50;
+      const offset = options?.offset ?? 0;
+
       const [meta, data] = await Promise.all([
-        safeApi.describeTable(connId, tableName, schema).catch(() => []),
-        safeApi.getTableData(connId, tableName, schema)
+        !isAppend ? safeApi.describeTable(connId, tableName, schema).catch(() => []) : Promise.resolve(null),
+        safeApi.getTableData(connId, tableName, schema, { limit, offset })
       ]);
 
       setTabs(prev =>
-        prev.map(t =>
-          t.id === tabId
-            ? { ...t, columnsMeta: meta, queryResult: data, isLoading: false }
-            : t
-        )
+        prev.map(t => {
+          if (t.id !== tabId) return t;
+
+          if (isAppend && t.queryResult) {
+            const combinedRows = [...t.queryResult.rows, ...data.rows];
+            return {
+              ...t,
+              isLoadingMore: false,
+              batchSize: limit,
+              queryResult: {
+                ...t.queryResult,
+                rows: combinedRows,
+                rowCount: combinedRows.length,
+                hasMore: data.hasMore,
+                totalCount: data.totalCount ?? t.queryResult.totalCount,
+                executionTimeMs: data.executionTimeMs
+              }
+            };
+          }
+
+          return {
+            ...t,
+            columnsMeta: meta ?? t.columnsMeta,
+            queryResult: data,
+            batchSize: limit,
+            isLoading: false,
+            isLoadingMore: false
+          };
+        })
       );
     } catch (err: any) {
       setTabs(prev =>
-        prev.map(t => (t.id === tabId ? { ...t, isLoading: false } : t))
+        prev.map(t =>
+          t.id === tabId
+            ? { ...t, isLoading: false, isLoadingMore: false }
+            : t
+        )
       );
       showToast(`Erro ao carregar dados de ${tableName}: ${err.message}`, 'error');
     }
+  };
+
+  const handleLoadMore = async () => {
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    if (!currentTab || !currentTab.tableName || !activeConnection) return;
+    const currentRowsCount = currentTab.queryResult?.rows?.length || 0;
+    const batchSize = currentTab.batchSize || 50;
+
+    await loadTableDataForTab(
+      currentTab.id,
+      currentTab.tableName,
+      activeConnection.id,
+      currentTab.schema,
+      {
+        limit: batchSize,
+        offset: currentRowsCount,
+        append: true
+      }
+    );
+  };
+
+  const handleLoadAll = async () => {
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    if (!currentTab || !currentTab.tableName || !activeConnection) return;
+    const totalCount = currentTab.queryResult?.totalCount || 5000;
+
+    if (totalCount > 10000) {
+      if (!confirm(`A tabela possui ${totalCount.toLocaleString()} registros. Carregar todos de uma vez pode usar bastante memória. Deseja continuar?`)) {
+        return;
+      }
+    }
+
+    await loadTableDataForTab(
+      currentTab.id,
+      currentTab.tableName,
+      activeConnection.id,
+      currentTab.schema,
+      {
+        limit: totalCount,
+        offset: 0,
+        append: false
+      }
+    );
+  };
+
+  const handleChangeBatchSize = async (newBatchSize: number) => {
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    if (!currentTab || !currentTab.tableName || !activeConnection) return;
+
+    setTabs(prev =>
+      prev.map(t => (t.id === currentTab.id ? { ...t, batchSize: newBatchSize } : t))
+    );
+
+    await loadTableDataForTab(
+      currentTab.id,
+      currentTab.tableName,
+      activeConnection.id,
+      currentTab.schema,
+      {
+        limit: newBatchSize,
+        offset: 0,
+        append: false
+      }
+    );
   };
 
   const handleConnect = async (config: ConnectionConfig) => {
@@ -220,10 +334,11 @@ export const App: React.FC = () => {
               id: 'query_1',
               title: 'Consulta SQL 1',
               type: 'query',
-              query: 'SELECT * FROM clients LIMIT 50;',
+              query: 'SELECT * FROM clients;',
               queryResult: null,
               columnsMeta: [],
-              isLoading: false
+              isLoading: false,
+              batchSize: 50
             }
           ]);
           setActiveTabId('query_1');
@@ -272,10 +387,11 @@ export const App: React.FC = () => {
           id: 'query_1',
           title: 'Consulta SQL 1',
           type: 'query',
-          query: 'SELECT * FROM clients LIMIT 50;',
+          query: 'SELECT * FROM clients;',
           queryResult: null,
           columnsMeta: [],
-          isLoading: false
+          isLoading: false,
+          batchSize: 50
         }
       ]);
       setActiveTabId('query_1');
@@ -374,9 +490,9 @@ export const App: React.FC = () => {
     const currentTab = tabs.find(t => t.id === activeTabId);
     const defaultQuery = selectedTable
       ? (currentTab?.schema && currentTab.schema !== 'default' && currentTab.schema !== 'public'
-          ? `SELECT * FROM "${currentTab.schema}"."${selectedTable}" LIMIT 100;`
-          : `SELECT * FROM "${selectedTable}" LIMIT 100;`)
-      : 'SELECT * FROM clients LIMIT 50;';
+          ? `SELECT * FROM "${currentTab.schema}"."${selectedTable}";`
+          : `SELECT * FROM "${selectedTable}";`)
+      : 'SELECT * FROM clients;';
 
     const newTab: TabItem = {
       id: newId,
@@ -385,7 +501,8 @@ export const App: React.FC = () => {
       query: defaultQuery,
       queryResult: null,
       columnsMeta: [],
-      isLoading: false
+      isLoading: false,
+      batchSize: 50
     };
 
     setTabs(prev => [...prev, newTab]);
@@ -798,6 +915,12 @@ export const App: React.FC = () => {
                 queryResult={currentTab?.queryResult || null}
                 columnsMeta={currentTab?.columnsMeta || []}
                 isLoading={currentTab?.isLoading || false}
+                isLoadingMore={currentTab?.isLoadingMore || false}
+                batchSize={currentTab?.batchSize || 50}
+                onLoadMore={currentTab?.type !== 'query' ? handleLoadMore : undefined}
+                onLoadAll={currentTab?.type !== 'query' ? handleLoadAll : undefined}
+                onChangeBatchSize={currentTab?.type !== 'query' ? handleChangeBatchSize : undefined}
+                onRefreshData={handleRefreshSchema}
                 onUpdateRow={handleUpdateRow}
                 onDeleteRow={handleDeleteRow}
                 onOpenAddRow={() => setIsAddRowDrawerOpen(true)}

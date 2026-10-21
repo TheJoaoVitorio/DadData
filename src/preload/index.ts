@@ -18,8 +18,12 @@ export const api = {
   // Query & CRUD
   executeQuery: (connectionId: string, query: string, options?: any) =>
     ipcRenderer.invoke(IPC_CHANNELS.DB_EXECUTE_QUERY, connectionId, query, options),
-  getTableData: (connectionId: string, tableName: string, schema?: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_GET_TABLE_DATA, connectionId, tableName, schema),
+  getTableData: (
+    connectionId: string,
+    tableName: string,
+    schema?: string,
+    options?: { limit?: number; offset?: number }
+  ) => ipcRenderer.invoke(IPC_CHANNELS.DB_GET_TABLE_DATA, connectionId, tableName, schema, options),
   insertRow: (connectionId: string, tableName: string, data: Record<string, any>) =>
     ipcRenderer.invoke(IPC_CHANNELS.DB_INSERT_ROW, connectionId, tableName, data),
   updateRow: (

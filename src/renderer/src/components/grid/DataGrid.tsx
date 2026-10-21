@@ -21,6 +21,12 @@ interface DataGridProps {
   queryResult: QueryResult | null;
   columnsMeta?: ColumnInfo[];
   isLoading: boolean;
+  isLoadingMore?: boolean;
+  batchSize?: number;
+  onLoadMore?: () => void;
+  onLoadAll?: () => void;
+  onChangeBatchSize?: (newSize: number) => void;
+  onRefreshData?: () => void;
   onUpdateRow: (primaryKey: Record<string, any>, changes: Record<string, any>) => Promise<void>;
   onDeleteRow: (primaryKey: Record<string, any>) => Promise<void>;
   onOpenAddRow: () => void;
@@ -33,6 +39,12 @@ export const DataGrid: React.FC<DataGridProps> = ({
   queryResult,
   columnsMeta = [],
   isLoading,
+  isLoadingMore = false,
+  batchSize = 50,
+  onLoadMore,
+  onLoadAll,
+  onChangeBatchSize,
+  onRefreshData,
   onUpdateRow,
   onDeleteRow,
   onOpenAddRow,
@@ -45,7 +57,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const pageSize = 20;
+  const [displayPageSize, setDisplayPageSize] = useState<number>(50);
 
   if (isLoading) {
     return (
@@ -118,8 +130,9 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
   // Pagination
   const totalRows = rows.length;
-  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const paginatedRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const isAllPages = displayPageSize === -1;
+  const totalPages = isAllPages ? 1 : Math.max(1, Math.ceil(totalRows / displayPageSize));
+  const paginatedRows = isAllPages ? rows : rows.slice((currentPage - 1) * displayPageSize, currentPage * displayPageSize);
 
   const handleStartEdit = (rowIdx: number, colName: string, currentVal: any) => {
     setEditingCell({ rowIdx, colName });
@@ -178,7 +191,14 @@ export const DataGrid: React.FC<DataGridProps> = ({
         <div className="flex items-center gap-2.5">
           <h2 className="text-base font-bold tracking-tight text-zinc-900">{title}</h2>
           <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-300/80 flex items-center gap-1 shadow-xs">
-            <NumberTicker value={totalRows} /> registros
+            <NumberTicker value={totalRows} />
+            {queryResult.totalCount !== undefined ? (
+              <span>de {queryResult.totalCount.toLocaleString()}</span>
+            ) : null}
+            <span>registros</span>
+            {queryResult.hasMore && (
+              <span className="text-amber-800 font-extrabold" title="Existem mais registros disponíveis no banco para carregar por demanda">+</span>
+            )}
           </span>
           {queryResult.executionTimeMs !== undefined && (
             <span className="text-[11px] font-mono text-zinc-500 flex items-center gap-1">
@@ -190,6 +210,47 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
         {/* Action Buttons in Pill Format */}
         <div className="flex items-center gap-1.5">
+          {/* Batch Selector & On-demand Load More */}
+          {onLoadMore && (
+            <div className="flex items-center gap-1 bg-zinc-100 p-0.5 rounded-full border border-zinc-200/90 text-xs">
+              <span className="text-[10px] text-zinc-500 font-bold px-1.5">Lote:</span>
+              {[50, 100, 250, 500].map(size => (
+                <button
+                  key={size}
+                  onClick={() => onChangeBatchSize && onChangeBatchSize(size)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                    (batchSize || 50) === size
+                      ? 'bg-zinc-950 text-white shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-200/60'
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {queryResult.hasMore && onLoadMore && (
+            <button
+              onClick={onLoadMore}
+              disabled={isLoadingMore}
+              title={`Carregar próximos ${batchSize || 50} registros do banco de dados`}
+              className="h-7 px-3 rounded-full bg-[#FACC15] hover:bg-[#EAB308] text-zinc-950 text-[11px] font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              {isLoadingMore ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                  <span>Carregando...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3 h-3 stroke-[2.5]" />
+                  <span>Carregar +{batchSize || 50}</span>
+                </>
+              )}
+            </button>
+          )}
+
           {/* Search Box */}
           <div className="relative">
             <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -277,7 +338,8 @@ export const DataGrid: React.FC<DataGridProps> = ({
               </tr>
             ) : (
               paginatedRows.map((row, rIdx) => {
-                const globalRowIdx = (currentPage - 1) * pageSize + rIdx;
+                const globalRowIdx =
+                  displayPageSize === -1 ? rIdx : (currentPage - 1) * displayPageSize + rIdx;
                 return (
                   <tr
                     key={rIdx}
@@ -364,34 +426,111 @@ export const DataGrid: React.FC<DataGridProps> = ({
                 );
               })
             )}
+
+            {/* Bottom Row: On-demand Data Loading Banner */}
+            {queryResult.hasMore && onLoadMore && (
+              <tr className="bg-amber-50/70 hover:bg-amber-100/60 transition-colors">
+                <td colSpan={columns.length + 2} className="py-3 px-4 text-center">
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="text-xs text-zinc-700 font-medium">
+                      Exibindo <strong>{totalRows}</strong>
+                      {queryResult.totalCount ? ` de ${queryResult.totalCount.toLocaleString()}` : ''} registros.
+                    </span>
+                    <button
+                      onClick={onLoadMore}
+                      disabled={isLoadingMore}
+                      className="px-4 py-1.5 rounded-full bg-[#FACC15] hover:bg-[#EAB308] text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isLoadingMore ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                          <span>Buscando registros no banco de dados...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Carregar mais {batchSize || 50} registros por demanda</span>
+                        </>
+                      )}
+                    </button>
+                    {onLoadAll && (!queryResult.totalCount || queryResult.totalCount <= 5000) && (
+                      <button
+                        onClick={onLoadAll}
+                        disabled={isLoadingMore}
+                        className="px-3.5 py-1.5 rounded-full bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-200 font-semibold text-xs transition-colors cursor-pointer"
+                      >
+                        Carregar todos ({queryResult.totalCount ? queryResult.totalCount.toLocaleString() : 'todos'})
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Pagination Footer */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-1.5 px-1 flex-shrink-0">
+      {/* Pagination & On-demand Footer */}
+      <div className="flex items-center justify-between pt-2 px-1 flex-shrink-0 text-xs border-t border-zinc-200/80">
+        <div className="flex items-center gap-3">
           <p className="text-[11px] text-zinc-500 font-medium">
-            Página {currentPage} de {totalPages} ({totalRows} itens no total)
+            {!isAllPages && totalPages > 1 ? `Página ${currentPage} de ${totalPages} • ` : ''}
+            {totalRows} registros carregados em memória
+            {queryResult.totalCount ? ` (total de ${queryResult.totalCount.toLocaleString()} no banco)` : ''}
           </p>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="h-6.5 px-2.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 text-[11px] font-semibold disabled:opacity-40 transition-colors"
-            >
-              Anterior
-            </button>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="h-6.5 px-2.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 text-[11px] font-semibold disabled:opacity-40 transition-colors"
-            >
-              Próxima
-            </button>
+          <div className="flex items-center gap-1 text-[11px] text-zinc-500">
+            <span>Visualização:</span>
+            {[25, 50, 100, -1].map(sz => (
+              <button
+                key={sz}
+                onClick={() => {
+                  setDisplayPageSize(sz);
+                  setCurrentPage(1);
+                }}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-colors cursor-pointer ${
+                  displayPageSize === sz
+                    ? 'bg-amber-200 text-amber-950 border border-amber-300'
+                    : 'hover:bg-zinc-100 text-zinc-600'
+                }`}
+              >
+                {sz === -1 ? 'Todos' : sz}
+              </button>
+            ))}
           </div>
         </div>
-      )}
+
+        <div className="flex items-center gap-2">
+          {queryResult.hasMore && onLoadMore && (
+            <button
+              onClick={onLoadMore}
+              disabled={isLoadingMore}
+              className="h-6.5 px-3 rounded-full bg-[#FACC15] hover:bg-[#EAB308] text-zinc-950 text-[11px] font-bold flex items-center gap-1 shadow-xs disabled:opacity-50 transition-all cursor-pointer"
+            >
+              <Plus className="w-3 h-3 stroke-[2.5]" />
+              <span>Carregar +{batchSize || 50} do banco</span>
+            </button>
+          )}
+
+          {!isAllPages && totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="h-6.5 px-2.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 text-[11px] font-semibold disabled:opacity-40 transition-colors cursor-pointer"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="h-6.5 px-2.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 text-[11px] font-semibold disabled:opacity-40 transition-colors cursor-pointer"
+              >
+                Próxima
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

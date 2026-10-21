@@ -102,18 +102,31 @@ export const safeApi = {
     };
   },
 
-  getTableData: async (connectionId: string, tableName: string, schema?: string): Promise<QueryResult> => {
-    if (window.api) return (window.api as any).getTableData(connectionId, tableName, schema);
+  getTableData: async (
+    connectionId: string,
+    tableName: string,
+    schema?: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<QueryResult> => {
+    if (window.api) return (window.api as any).getTableData(connectionId, tableName, schema, options);
+    const limit = options?.limit ?? 50;
+    const offset = options?.offset ?? 0;
+    const mockRows = [
+      { CODIGO: 101, NOME: 'Auto Peças Brasil Ltda', CIDADE: 'São Paulo', SALDO: 15420.50, ATIVO: true },
+      { CODIGO: 102, NOME: 'Distribuidora Alvorada', CIDADE: 'Curitiba', SALDO: 8920.00, ATIVO: true },
+      { CODIGO: 103, NOME: 'Comercial Silva & Cia', CIDADE: 'Belo Horizonte', SALDO: 23150.75, ATIVO: true },
+      { CODIGO: 104, NOME: 'Farmácia Central', CIDADE: 'Porto Alegre', SALDO: 4320.10, ATIVO: false },
+      { CODIGO: 105, NOME: 'Supermercado Progresso', CIDADE: 'Campinas', SALDO: 45890.00, ATIVO: true }
+    ];
+    const sliced = mockRows.slice(offset, offset + limit);
     return {
       columns: ['CODIGO', 'NOME', 'CIDADE', 'SALDO', 'ATIVO'],
-      rows: [
-        { CODIGO: 101, NOME: 'Auto Peças Brasil Ltda', CIDADE: 'São Paulo', SALDO: 15420.50, ATIVO: true },
-        { CODIGO: 102, NOME: 'Distribuidora Alvorada', CIDADE: 'Curitiba', SALDO: 8920.00, ATIVO: true },
-        { CODIGO: 103, NOME: 'Comercial Silva & Cia', CIDADE: 'Belo Horizonte', SALDO: 23150.75, ATIVO: true },
-        { CODIGO: 104, NOME: 'Farmácia Central', CIDADE: 'Porto Alegre', SALDO: 4320.10, ATIVO: false },
-        { CODIGO: 105, NOME: 'Supermercado Progresso', CIDADE: 'Campinas', SALDO: 45890.00, ATIVO: true }
-      ],
-      rowCount: 5,
+      rows: sliced,
+      rowCount: sliced.length,
+      totalCount: mockRows.length,
+      hasMore: offset + sliced.length < mockRows.length,
+      offset,
+      limit,
       executionTimeMs: 8,
       statementType: 'SELECT'
     };

@@ -72,7 +72,11 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <span className="text-zinc-400">linhas:</span>
           <span className="font-bold text-amber-700">
             <NumberTicker value={rowCount} />
+            {queryResult?.totalCount !== undefined ? ` / ${queryResult.totalCount.toLocaleString()}` : ''}
           </span>
+          {queryResult?.hasMore && (
+            <span className="text-amber-600 font-extrabold" title="Carregamento sob demanda disponível">+</span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 font-mono text-[11px] text-zinc-600">

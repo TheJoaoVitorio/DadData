@@ -79,6 +79,10 @@ export interface QueryResult {
   rowCount: number;
   executionTimeMs: number;
   statementType?: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'CREATE' | 'DROP' | 'OTHER';
+  totalCount?: number;
+  hasMore?: boolean;
+  offset?: number;
+  limit?: number;
 }
 
 export interface MutationResult {

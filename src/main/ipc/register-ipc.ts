@@ -45,20 +45,80 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return driverManager.executeQuery(connectionId, query, options);
   });
 
-  ipcMain.handle(IPC_CHANNELS.DB_GET_TABLE_DATA, async (_event, connectionId: string, tableName: string, schema?: string) => {
-    const config = driverManager.getActiveConnectionConfig(connectionId);
-    let target = `"${tableName}"`;
-    if (schema && schema !== 'default' && !tableName.includes('.')) {
-      target = `"${schema}"."${tableName}"`;
-    } else if (tableName.includes('.')) {
-      target = tableName.split('.').map(p => `"${p}"`).join('.');
+  ipcMain.handle(
+    IPC_CHANNELS.DB_GET_TABLE_DATA,
+    async (
+      _event,
+      connectionId: string,
+      tableName: string,
+      schema?: string,
+      options?: { limit?: number; offset?: number }
+    ) => {
+      const config = driverManager.getActiveConnectionConfig(connectionId);
+      const limit = Math.max(1, options?.limit ?? 50);
+      const offset = Math.max(0, options?.offset ?? 0);
+
+      let target = `"${tableName}"`;
+      if (schema && schema !== 'default' && !tableName.includes('.')) {
+        target = `"${schema}"."${tableName}"`;
+      } else if (tableName.includes('.')) {
+        target = tableName.split('.').map(p => `"${p}"`).join('.');
+      }
+
+      let dataQuery = '';
+      let countQuery = '';
+
+      if (config?.type === 'mongodb') {
+        dataQuery = `db.${tableName}.find().skip(${offset}).limit(${limit})`;
+        countQuery = `db.${tableName}.countDocuments()`;
+      } else if (config?.type === 'firebird') {
+        dataQuery = `SELECT FIRST ${limit} SKIP ${offset} * FROM ${target};`;
+        countQuery = `SELECT COUNT(*) AS "total" FROM ${target};`;
+      } else if (config?.type === 'mssql') {
+        const mssqlTarget = (schema && schema !== 'default') ? `[${schema}].[${tableName}]` : `[${tableName}]`;
+        dataQuery = `SELECT * FROM ${mssqlTarget} ORDER BY (SELECT NULL) OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY;`;
+        countQuery = `SELECT COUNT(*) AS total FROM ${mssqlTarget};`;
+      } else if (config?.type === 'mysql') {
+        dataQuery = `SELECT * FROM ${target} LIMIT ${offset}, ${limit};`;
+        countQuery = `SELECT COUNT(*) AS total FROM ${target};`;
+      } else {
+        // postgres, sqlite, etc.
+        dataQuery = `SELECT * FROM ${target} LIMIT ${limit} OFFSET ${offset};`;
+        countQuery = `SELECT COUNT(*) AS total FROM ${target};`;
+      }
+
+      const dataRes = await driverManager.executeQuery(connectionId, dataQuery, { limit, offset });
+
+      // Attempt to get total count
+      let totalCount: number | undefined = undefined;
+      try {
+        if (countQuery) {
+          const countRes = await driverManager.executeQuery(connectionId, countQuery);
+          if (countRes.rows && countRes.rows.length > 0) {
+            const firstRow = countRes.rows[0];
+            const rawVal = Object.values(firstRow)[0];
+            if (rawVal !== undefined && rawVal !== null && !isNaN(Number(rawVal))) {
+              totalCount = Number(rawVal);
+            }
+          }
+        }
+      } catch {
+        // Silently ignore if count query fails (e.g. view without count or permission)
+      }
+
+      const rowsCount = dataRes.rows.length;
+      const hasMore = totalCount !== undefined ? offset + rowsCount < totalCount : rowsCount === limit;
+
+      return {
+        ...dataRes,
+        rowCount: rowsCount,
+        totalCount: totalCount ?? (rowsCount < limit ? offset + rowsCount : undefined),
+        hasMore,
+        offset,
+        limit
+      };
     }
-    let query = `SELECT * FROM ${target} LIMIT 1000;`;
-    if (config?.type === 'mongodb') {
-      query = `db.${tableName}.find()`;
-    }
-    return driverManager.executeQuery(connectionId, query);
-  });
+  );
 
   ipcMain.handle(IPC_CHANNELS.DB_INSERT_ROW, async (_event, connectionId: string, tableName: string, data: Record<string, any>) => {
     return driverManager.insertRow(connectionId, tableName, data);
