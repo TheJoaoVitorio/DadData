@@ -98,7 +98,7 @@ impl EngineManager {
                 })
             }
             "mssql" | "sqlserver" => {
-                let engine = MssqlEngine::connect(&config)?;
+                let engine = MssqlEngine::connect(&config).await?;
                 let db_name = engine.db_name.clone();
                 let server_version = engine.server_version.clone();
                 let mut map = self.engines.write().await;
@@ -218,11 +218,18 @@ impl EngineManager {
     }
 
     pub async fn list_databases(&self, config: ConnectionConfig) -> Result<Vec<String>, String> {
-        if config.db_type.to_lowercase().contains("postgres") {
-            let engine = PostgresEngine::connect(&config).await?;
-            engine.list_databases().await
-        } else {
-            Ok(vec![])
+        match config.db_type.to_lowercase().as_str() {
+            "postgres" | "postgresql" => {
+                let engine = PostgresEngine::connect(&config).await?;
+                engine.list_databases().await
+            }
+            "mysql" | "mariadb" => {
+                MysqlEngine::list_databases(&config).await
+            }
+            "mssql" | "sqlserver" => {
+                MssqlEngine::list_databases(&config).await
+            }
+            _ => Ok(vec![]),
         }
     }
 
@@ -236,7 +243,7 @@ impl EngineManager {
             ActiveEngine::Postgres(pg) => pg.list_tables().await,
             ActiveEngine::Sqlite(sq) => sq.list_tables(),
             ActiveEngine::Mysql(my) => my.list_tables().await,
-            ActiveEngine::Mssql(ms) => ms.list_tables(),
+            ActiveEngine::Mssql(ms) => ms.list_tables().await,
             ActiveEngine::Firebird(fb) => fb.list_tables(),
             ActiveEngine::Paradox(px) => px.list_tables(),
             ActiveEngine::Dbf(dbf) => dbf.list_tables(),
@@ -260,7 +267,7 @@ impl EngineManager {
             ActiveEngine::Postgres(pg) => pg.describe_table(table_name, schema).await,
             ActiveEngine::Sqlite(sq) => sq.describe_table(table_name),
             ActiveEngine::Mysql(my) => my.describe_table(table_name).await,
-            ActiveEngine::Mssql(ms) => ms.describe_table(table_name),
+            ActiveEngine::Mssql(ms) => ms.describe_table(table_name, schema).await,
             ActiveEngine::Firebird(fb) => fb.describe_table(table_name),
             ActiveEngine::Paradox(px) => px.describe_table(table_name),
             ActiveEngine::Dbf(dbf) => dbf.describe_table(table_name),
@@ -283,7 +290,7 @@ impl EngineManager {
             ActiveEngine::Postgres(pg) => pg.execute_query(sql).await,
             ActiveEngine::Sqlite(sq) => sq.execute_query(sql),
             ActiveEngine::Mysql(my) => my.execute_query(sql).await,
-            ActiveEngine::Mssql(ms) => ms.execute_query(sql),
+            ActiveEngine::Mssql(ms) => ms.execute_query(sql).await,
             ActiveEngine::Firebird(fb) => fb.execute_query(sql),
             ActiveEngine::Paradox(px) => px.execute_query(sql),
             ActiveEngine::Dbf(dbf) => dbf.execute_query(sql),
@@ -309,7 +316,7 @@ impl EngineManager {
             ActiveEngine::Postgres(pg) => pg.get_table_data(table_name, schema, limit, offset).await,
             ActiveEngine::Sqlite(sq) => sq.get_table_data(table_name, limit, offset),
             ActiveEngine::Mysql(my) => my.get_table_data(table_name, limit, offset).await,
-            ActiveEngine::Mssql(ms) => ms.get_table_data(table_name, limit, offset),
+            ActiveEngine::Mssql(ms) => ms.get_table_data(table_name, schema, limit, offset).await,
             ActiveEngine::Firebird(fb) => fb.get_table_data(table_name, limit, offset),
             ActiveEngine::Paradox(px) => px.get_table_data(table_name, limit, offset),
             ActiveEngine::Dbf(dbf) => dbf.get_table_data(table_name, limit, offset),

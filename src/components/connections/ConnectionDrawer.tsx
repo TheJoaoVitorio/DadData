@@ -188,7 +188,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
       setFilePath('');
       setHost('localhost');
       setPort(5432);
-      setDatabase('postgres');
+      setDatabase('');
       setUser('postgres');
       setPassword('');
       setSsl(false);
@@ -225,7 +225,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
       setPassword('');
       setHost('localhost');
       setPort(5432);
-      setDatabase('postgres');
+      setDatabase('');
     } else if (eng.type === 'mysql') {
       setUser('root');
       setPassword('');
@@ -237,7 +237,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
       setPassword('');
       setHost('localhost');
       setPort(1433);
-      setDatabase('master');
+      setDatabase('');
     } else if (eng.type === 'mongodb') {
       setUser('');
       setPassword('');
@@ -348,9 +348,6 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
       const dbs = await safeApi.listDatabases(currentConfig);
       if (dbs && dbs.length > 0) {
         setDiscoveredDatabases(dbs);
-        if (!database || !dbs.includes(database)) {
-          setDatabase(dbs[0]);
-        }
       } else {
         setDatabaseSearchError('Nenhum banco de dados retornado pelo servidor.');
       }

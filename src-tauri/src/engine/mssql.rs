@@ -1,151 +1,254 @@
 use std::time::Instant;
+use tiberius::{AuthMethod, Client, ColumnData, Config, SqlBrowser};
+use tokio::net::TcpStream;
+use tokio::sync::Mutex;
+use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 use serde_json::{json, Map, Value};
 use crate::engine::types::*;
 
 pub struct MssqlEngine {
-    pub host: String,
-    pub port: u16,
+    client: Mutex<Client<Compat<TcpStream>>>,
     pub db_name: String,
-    pub auth_type: String,
     pub server_version: String,
-    pub tables: Map<String, Value>,
+}
+
+fn mssql_col_to_json(col: ColumnData<'static>) -> Value {
+    match col {
+        ColumnData::U8(v) => v.map(|x| json!(x)).unwrap_or(Value::Null),
+        ColumnData::I16(v) => v.map(|x| json!(x)).unwrap_or(Value::Null),
+        ColumnData::I32(v) => v.map(|x| json!(x)).unwrap_or(Value::Null),
+        ColumnData::I64(v) => v.map(|x| json!(x)).unwrap_or(Value::Null),
+        ColumnData::F32(v) => v.map(|x| json!(x)).unwrap_or(Value::Null),
+        ColumnData::F64(v) => v.map(|x| json!(x)).unwrap_or(Value::Null),
+        ColumnData::Bit(v) => v.map(|x| json!(x)).unwrap_or(Value::Null),
+        ColumnData::String(v) => v.map(|x| json!(x.into_owned())).unwrap_or(Value::Null),
+        ColumnData::Guid(v) => v.map(|x| json!(x.to_string())).unwrap_or(Value::Null),
+        ColumnData::Binary(v) => v.map(|x| json!(format!("{:02X?}", x.into_owned()))).unwrap_or(Value::Null),
+        ColumnData::Numeric(v) => v.map(|x| json!(format!("{:?}", x))).unwrap_or(Value::Null),
+        ColumnData::Xml(v) => v.map(|x| json!(format!("{:?}", x))).unwrap_or(Value::Null),
+        ColumnData::DateTime(v) => v.map(|x| json!(format!("{:?}", x))).unwrap_or(Value::Null),
+        ColumnData::SmallDateTime(v) => v.map(|x| json!(format!("{:?}", x))).unwrap_or(Value::Null),
+        ColumnData::Time(v) => v.map(|x| json!(format!("{:?}", x))).unwrap_or(Value::Null),
+        ColumnData::Date(v) => v.map(|x| json!(format!("{:?}", x))).unwrap_or(Value::Null),
+        ColumnData::DateTime2(v) => v.map(|x| json!(format!("{:?}", x))).unwrap_or(Value::Null),
+        ColumnData::DateTimeOffset(v) => v.map(|x| json!(format!("{:?}", x))).unwrap_or(Value::Null),
+    }
 }
 
 impl MssqlEngine {
-    pub fn connect(config: &ConnectionConfig) -> Result<Self, String> {
-        let host = config.host.clone().unwrap_or_else(|| "localhost".into());
-        let port = config.port.unwrap_or(1433);
-        let db_name = config.database.clone().unwrap_or_else(|| "master".into());
-        let auth_type = config.auth_type.clone().unwrap_or_else(|| "sql".into());
+    pub async fn connect_client(config_in: &ConnectionConfig) -> Result<(Client<Compat<TcpStream>>, String), String> {
+        let mut config = Config::new();
+        let host_raw = config_in.host.as_deref().unwrap_or("localhost");
 
-        let auth_desc = if auth_type == "windows" {
-            "Windows Integrated Authentication"
+        let (host_str, instance_opt) = if let Some(idx) = host_raw.find('\\') {
+            (&host_raw[..idx], Some(&host_raw[idx + 1..]))
         } else {
-            "SQL Server Authentication"
+            (host_raw, None)
         };
 
-        let server_version = format!(
-            "Microsoft SQL Server ({}:{}) [{}]",
-            host, port, auth_desc
-        );
+        let resolved_host = match host_str.trim() {
+            "." | "(local)" | "" => "127.0.0.1",
+            other => other,
+        };
 
-        let mut tables = Map::new();
+        config.host(resolved_host);
 
-        // Sample SQL Server tables (AdventureWorks/Northwind style)
-        let cols_customers = json!([
-            { "name": "CustomerID", "type": "INT", "nullable": false, "isPrimaryKey": true },
-            { "name": "CompanyName", "type": "NVARCHAR(100)", "nullable": false, "isPrimaryKey": false },
-            { "name": "ContactName", "type": "NVARCHAR(60)", "nullable": false, "isPrimaryKey": false },
-            { "name": "Email", "type": "NVARCHAR(100)", "nullable": true, "isPrimaryKey": false },
-            { "name": "Phone", "type": "NVARCHAR(25)", "nullable": true, "isPrimaryKey": false }
-        ]);
+        if let Some(inst) = instance_opt {
+            config.instance_name(inst);
+        } else if let Some(p) = config_in.port {
+            config.port(p);
+        } else {
+            config.port(1433);
+        }
 
-        let rows_customers = json!([
-            { "CustomerID": 1, "CompanyName": "Contoso Retail Brasil", "ContactName": "Eduardo Santos", "Email": "eduardo@contoso.com.br", "Phone": "(11) 3456-7890" },
-            { "CustomerID": 2, "CompanyName": "Fabrikam Componentes", "ContactName": "Camila Oliveira", "Email": "camila@fabrikam.com", "Phone": "(41) 9876-5432" },
-            { "CustomerID": 3, "CompanyName": "Litware Soluções em TI", "ContactName": "Rodrigo Silva", "Email": "rodrigo@litware.com.br", "Phone": "(21) 2345-6789" }
-        ]);
+        if let Some(db) = &config_in.database {
+            if !db.trim().is_empty() {
+                config.database(db);
+            }
+        }
 
-        let cols_orders = json!([
-            { "name": "OrderID", "type": "INT", "nullable": false, "isPrimaryKey": true },
-            { "name": "CustomerID", "type": "INT", "nullable": false, "isPrimaryKey": false },
-            { "name": "OrderDate", "type": "DATETIME2", "nullable": false, "isPrimaryKey": false },
-            { "name": "TotalAmount", "type": "MONEY", "nullable": false, "isPrimaryKey": false }
-        ]);
+        let auth_type = config_in.auth_type.as_deref().unwrap_or("sql");
+        if auth_type == "windows" {
+            let user = config_in.user.as_deref().unwrap_or("");
+            let pass = config_in.password.as_deref().unwrap_or("");
+            if !user.is_empty() {
+                config.authentication(AuthMethod::windows(user, pass));
+            } else {
+                config.authentication(AuthMethod::Integrated);
+            }
+        } else {
+            let user = config_in.user.as_deref().unwrap_or("sa");
+            let pass = config_in.password.as_deref().unwrap_or("");
+            config.authentication(AuthMethod::sql_server(user, pass));
+        }
 
-        let rows_orders = json!([
-            { "OrderID": 10001, "CustomerID": 1, "OrderDate": "2024-05-12T10:30:00", "TotalAmount": 14500.00 },
-            { "OrderID": 10002, "CustomerID": 2, "OrderDate": "2024-05-14T14:15:00", "TotalAmount": 8200.50 },
-            { "OrderID": 10003, "CustomerID": 3, "OrderDate": "2024-05-15T09:00:00", "TotalAmount": 32100.75 }
-        ]);
+        config.trust_cert();
 
-        tables.insert("Customers".into(), json!({ "columns": cols_customers, "rows": rows_customers }));
-        tables.insert("Orders".into(), json!({ "columns": cols_orders, "rows": rows_orders }));
+        let tcp = TcpStream::connect_named(&config).await.map_err(|e| {
+            format!("Falha de conexão com o SQL Server (Host: {}): {}", host_raw, e)
+        })?;
+        tcp.set_nodelay(true).map_err(|e| e.to_string())?;
+
+        let client = Client::connect(config, tcp.compat_write()).await.map_err(|e| {
+            format!("Falha na autenticação do SQL Server: {}", e)
+        })?;
+
+        let display_server = if let Some(inst) = instance_opt {
+            format!("{}\\{}", resolved_host, inst)
+        } else {
+            format!("{}:{}", resolved_host, config_in.port.unwrap_or(1433))
+        };
+
+        Ok((client, display_server))
+    }
+
+    pub async fn list_databases(config_in: &ConnectionConfig) -> Result<Vec<String>, String> {
+        let (mut client, _) = Self::connect_client(config_in).await?;
+        let stream = client
+            .simple_query("SELECT name FROM sys.databases WHERE state = 0 AND name NOT IN ('model') ORDER BY name ASC;")
+            .await
+            .map_err(|e| format!("Erro ao listar databases do SQL Server: {}", e))?;
+
+        let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+        let mut dbs = Vec::new();
+        for r in rows {
+            if let Some(name) = r.get::<&str, _>(0) {
+                dbs.push(name.to_string());
+            }
+        }
+        Ok(dbs)
+    }
+
+    pub async fn connect(config_in: &ConnectionConfig) -> Result<Self, String> {
+        let (mut client, server_str) = Self::connect_client(config_in).await?;
+
+        let stream = client.simple_query("SELECT @@VERSION, DB_NAME();").await.map_err(|e| e.to_string())?;
+        let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+
+        let (ver_str, current_db) = if let Some(first_row) = rows.first() {
+            let ver = first_row.get::<&str, _>(0).unwrap_or("Microsoft SQL Server");
+            let short_ver = ver.lines().next().unwrap_or(ver).to_string();
+            let db = first_row.get::<&str, _>(1).unwrap_or("master").to_string();
+            (short_ver, db)
+        } else {
+            ("Microsoft SQL Server".to_string(), "master".to_string())
+        };
+
+        let resolved_db = config_in.database.clone().filter(|d| !d.trim().is_empty()).unwrap_or(current_db);
 
         Ok(Self {
-            host,
-            port,
-            db_name,
-            auth_type,
-            server_version,
-            tables,
+            client: Mutex::new(client),
+            db_name: resolved_db,
+            server_version: format!("{} ({})", ver_str, server_str),
         })
     }
 
-    pub fn list_tables(&self) -> Result<Vec<TableInfo>, String> {
-        let mut list = Vec::new();
-        for (name, data) in &self.tables {
-            let row_count = data.get("rows").and_then(|r| r.as_array()).map(|a| a.len() as i64);
-            list.push(TableInfo {
-                name: name.clone(),
-                schema: Some("dbo".into()),
-                row_count,
-                table_type: "table".into(),
+    pub async fn list_tables(&self) -> Result<Vec<TableInfo>, String> {
+        let mut client = self.client.lock().await;
+        let stream = client.simple_query(r#"
+            SELECT TABLE_NAME, TABLE_SCHEMA, TABLE_TYPE 
+            FROM INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_TYPE IN ('BASE TABLE', 'VIEW')
+            ORDER BY TABLE_SCHEMA, TABLE_NAME;
+        "#).await.map_err(|e| format!("Erro ao listar tabelas do SQL Server: {}", e))?;
+
+        let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+        let mut tables = Vec::new();
+        for r in rows {
+            let t_name = r.get::<&str, _>(0).unwrap_or("").to_string();
+            let schema = r.get::<&str, _>(1).map(|s| s.to_string());
+            let t_type = r.get::<&str, _>(2).unwrap_or("BASE TABLE");
+
+            tables.push(TableInfo {
+                name: t_name,
+                schema: schema.or(Some("dbo".into())),
+                row_count: None,
+                table_type: if t_type.contains("VIEW") { "view".into() } else { "table".into() },
             });
         }
-        Ok(list)
+        Ok(tables)
     }
 
-    pub fn describe_table(&self, table_name: &str) -> Result<Vec<ColumnInfo>, String> {
-        let table = self.tables.get(table_name).or_else(|| self.tables.values().next());
-        if let Some(t) = table {
-            if let Some(cols) = t.get("columns").and_then(|c| c.as_array()) {
-                let parsed: Result<Vec<ColumnInfo>, _> = serde_json::from_value(Value::Array(cols.clone()));
-                return parsed.map_err(|e| e.to_string());
-            }
+    pub async fn describe_table(&self, table_name: &str, schema: Option<&str>) -> Result<Vec<ColumnInfo>, String> {
+        let mut client = self.client.lock().await;
+        let schema_filter = schema.unwrap_or("dbo");
+        let sql = format!(r#"
+            SELECT c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE,
+                   COALESCE(COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsIdentity'), 0) AS is_identity
+            FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_NAME = '{}' AND c.TABLE_SCHEMA = '{}'
+            ORDER BY c.ORDINAL_POSITION ASC;
+        "#, table_name.replace('\'', "''"), schema_filter.replace('\'', "''"));
+
+        let stream = client.simple_query(&sql).await.map_err(|e| format!("Erro ao descrever tabela: {}", e))?;
+        let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+
+        let mut cols = Vec::new();
+        for r in rows {
+            let col_name = r.get::<&str, _>(0).unwrap_or("").to_string();
+            let data_type = r.get::<&str, _>(1).unwrap_or("VARCHAR").to_uppercase();
+            let is_nullable = r.get::<&str, _>(2).unwrap_or("YES").to_uppercase() == "YES";
+            let is_pk = r.get::<i32, _>(3).unwrap_or(0) == 1;
+
+            cols.push(ColumnInfo {
+                name: col_name,
+                col_type: data_type,
+                nullable: is_nullable,
+                is_primary_key: is_pk,
+            });
         }
-        Err(format!("Tabela SQL Server '{}' não encontrada", table_name))
+        Ok(cols)
     }
 
-    pub fn execute_query(&self, _sql: &str) -> Result<QueryResult, String> {
+    pub async fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
-        let (_name, data) = self.tables.iter().next().ok_or_else(|| "Nenhuma tabela disponível".to_string())?;
-        let rows = data.get("rows").and_then(|r| r.as_array()).cloned().unwrap_or_default();
-        let columns = if let Some(first) = rows.first().and_then(|r| r.as_object()) {
-            first.keys().cloned().collect()
+        let mut client = self.client.lock().await;
+        let stream = client.simple_query(sql).await.map_err(|e| format!("Erro ao executar query no SQL Server: {}", e))?;
+        let execution_time_ms = start.elapsed().as_millis();
+
+        let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+        let columns: Vec<String> = if let Some(first) = rows.first() {
+            first.columns().iter().map(|c| c.name().to_string()).collect()
         } else {
-            vec![]
+            Vec::new()
         };
 
-        let count = rows.len();
+        let mut res_rows = Vec::new();
+        for r in rows {
+            let mut map = Map::new();
+            for (col_name, val) in columns.iter().zip(r.into_iter()) {
+                map.insert(col_name.clone(), mssql_col_to_json(val));
+            }
+            res_rows.push(Value::Object(map));
+        }
+
+        let count = res_rows.len();
         Ok(QueryResult {
             columns,
-            rows,
+            rows: res_rows,
             row_count: count,
             total_count: Some(count as i64),
             has_more: false,
-            execution_time_ms: start.elapsed().as_millis(),
+            execution_time_ms,
             statement_type: Some("SELECT".into()),
             offset: None,
             limit: None,
         })
     }
 
-    pub fn get_table_data(&self, table_name: &str, limit: usize, offset: usize) -> Result<QueryResult, String> {
-        let start = Instant::now();
-        let data = self.tables.get(table_name).or_else(|| self.tables.values().next()).ok_or_else(|| "Tabela não encontrada".to_string())?;
-        let rows = data.get("rows").and_then(|r| r.as_array()).cloned().unwrap_or_default();
-        let columns = if let Some(first) = rows.first().and_then(|r| r.as_object()) {
-            first.keys().cloned().collect()
-        } else {
-            vec![]
-        };
-
-        let total = rows.len();
-        let sliced: Vec<Value> = rows.into_iter().skip(offset).take(limit).collect();
-        let count = sliced.len();
-        let has_more = (offset + count) < total;
-
-        Ok(QueryResult {
-            columns,
-            rows: sliced,
-            row_count: count,
-            total_count: Some(total as i64),
-            has_more,
-            execution_time_ms: start.elapsed().as_millis(),
-            statement_type: Some("SELECT".into()),
-            offset: Some(offset),
-            limit: Some(limit),
-        })
+    pub async fn get_table_data(&self, table_name: &str, schema: Option<&str>, limit: usize, offset: usize) -> Result<QueryResult, String> {
+        let s = schema.unwrap_or("dbo");
+        let sql = format!(
+            "SELECT * FROM [{}].[{}] ORDER BY (SELECT NULL) OFFSET {} ROWS FETCH NEXT {} ROWS ONLY;",
+            s, table_name, offset, limit
+        );
+        let fallback_sql = format!(
+            "SELECT TOP {} * FROM [{}].[{}];",
+            limit, s, table_name
+        );
+        match self.execute_query(&sql).await {
+            Ok(res) => Ok(res),
+            Err(_) => self.execute_query(&fallback_sql).await,
+        }
     }
 }

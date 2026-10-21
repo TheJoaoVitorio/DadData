@@ -1,21 +1,72 @@
-use std::fs::File;
-use std::io::Read;
-use std::path::PathBuf;
+use std::path::Path;
+use std::str::FromStr;
+use std::sync::Mutex;
 use std::time::Instant;
+use rsfbclient::{
+    builder_native, builder_pure_rust, Charset, Queryable, Row, SimpleConnection, SqlType,
+};
 use serde_json::{json, Map, Value};
 use crate::engine::types::*;
 
 pub struct FirebirdEngine {
-    pub file_path: Option<PathBuf>,
+    conn: Mutex<SimpleConnection>,
     pub db_name: String,
     pub server_version: String,
-    pub tables: Map<String, Value>,
+}
+
+fn fb_sql_type_to_json(val: &SqlType) -> Value {
+    match val {
+        SqlType::Null => Value::Null,
+        SqlType::Text(t) => Value::String(t.clone()),
+        SqlType::Integer(i) => json!(i),
+        SqlType::Int128(i) => json!(i.to_string()),
+        SqlType::Floating(f) => json!(f),
+        SqlType::Timestamp(ts) => Value::String(ts.to_string()),
+        SqlType::Binary(b) => Value::String(format!("{:02X?}", b)),
+        SqlType::Boolean(b) => json!(b),
+    }
+}
+
+fn find_fbclient_dll(db_path: Option<&str>) -> Option<String> {
+    if let Some(p) = db_path {
+        if let Some(parent) = Path::new(p).parent() {
+            let local_dll = parent.join("fbclient.dll");
+            if local_dll.exists() {
+                return Some(local_dll.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    let candidates = [
+        r"C:\Program Files\Firebird\Firebird_5_0\fbclient.dll",
+        r"C:\Program Files\Firebird\Firebird_4_0\fbclient.dll",
+        r"C:\Program Files\Firebird\Firebird_3_0\fbclient.dll",
+        r"C:\Program Files\Firebird\Firebird_2_5\bin\fbclient.dll",
+        r"C:\Program Files (x86)\Firebird\Firebird_5_0\fbclient.dll",
+        r"C:\Program Files (x86)\Firebird\Firebird_4_0\fbclient.dll",
+        r"C:\Program Files (x86)\Firebird\Firebird_3_0\fbclient.dll",
+        r"C:\Program Files (x86)\Firebird\Firebird_2_5\bin\fbclient.dll",
+        r"C:\Windows\System32\fbclient.dll",
+        r"C:\Windows\SysWOW64\fbclient.dll",
+    ];
+
+    for c in &candidates {
+        if Path::new(c).exists() {
+            return Some((*c).to_string());
+        }
+    }
+
+    None
 }
 
 impl FirebirdEngine {
     pub fn connect(config: &ConnectionConfig) -> Result<Self, String> {
-        let candidate_path = config.file_path.as_ref().or_else(|| {
-            if let Some(db) = &config.database {
+        let user = config.user.as_deref().unwrap_or("SYSDBA");
+        let password = config.password.as_deref().unwrap_or("masterkey");
+        let cs = Charset::from_str("WIN1252").unwrap_or_else(|_| Charset::from_str("utf8").unwrap());
+
+        let candidate_path = config.file_path.as_deref().or_else(|| {
+            if let Some(db) = config.database.as_deref() {
                 let db_lower = db.to_lowercase();
                 if db_lower.ends_with(".fdb")
                     || db_lower.ends_with(".gdb")
@@ -29,174 +80,224 @@ impl FirebirdEngine {
             None
         });
 
-        let (file_path, db_name, version, discovered_tables) = if let Some(path_str) = candidate_path {
-            let path = PathBuf::from(path_str);
-            if !path.exists() {
-                return Err(format!("Arquivo de banco de dados Firebird (.FDB/.GDB) não encontrado: {}", path_str));
-            }
+        let mut last_error: Option<String> = None;
 
-            // Inspect Firebird On-Disk Structure (ODS) version from header page (Page 0)
-            let mut file = File::open(&path).map_err(|e| format!("Erro ao abrir arquivo Firebird: {}", e))?;
-            let mut header = [0u8; 64];
-            let read_len = file.read(&mut header).unwrap_or(0);
+        // Mode 1: Local file embedded / native attempt if fbclient.dll exists
+        if let Some(path_str) = candidate_path {
+            if let Some(dll_path) = find_fbclient_dll(Some(path_str)) {
+                let builder = builder_native();
+                let native_res = builder
+                    .with_dyn_load(dll_path.clone())
+                    .with_embedded()
+                    .db_name(path_str)
+                    .user(user)
+                    .charset(cs.clone())
+                    .connect();
 
-            let ods_desc = if read_len >= 16 && (header[0] == 0x01 || header[0] == 0x00) {
-                let ods_major = u16::from_le_bytes([header[8], header[9]]);
-                let ods_minor = u16::from_le_bytes([header[10], header[11]]);
-                let page_size = u16::from_le_bytes([header[16], header[17]]);
+                match native_res {
+                    Ok(conn) => {
+                        let name = Path::new(path_str)
+                            .file_name()
+                            .map(|f| f.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "DATABASE.FDB".into());
 
-                let ver_str = match ods_major {
-                    10 if ods_minor == 0 => "Firebird 1.0 (ODS 10.0)",
-                    10 if ods_minor >= 1 => "Firebird 1.5 (ODS 10.1)",
-                    11 if ods_minor == 0 => "Firebird 2.0 (ODS 11.0)",
-                    11 if ods_minor == 1 => "Firebird 2.1 (ODS 11.1)",
-                    11 if ods_minor >= 2 => "Firebird 2.5 (ODS 11.2)",
-                    12 if ods_minor == 0 => "Firebird 3.0 (ODS 12.0)",
-                    12 => "Firebird 3.0.x (ODS 12.x)",
-                    13 if ods_minor == 0 => "Firebird 4.0 (ODS 13.0)",
-                    13 => "Firebird 5.0 (ODS 13.1)",
-                    _other => "Firebird Embedded",
-                };
-                let p_size = if page_size > 0 { page_size } else { 4096 };
-                format!("{} Embedded [Page: {} bytes]", ver_str, p_size)
-            } else {
-                "Firebird Embedded Engine (ODS Universal)".into()
-            };
-
-            // Scan header and catalog pages for user table names
-            let mut scanned_tables = Vec::new();
-            if let Ok(mut scan_file) = File::open(&path) {
-                let mut scan_buf = vec![0u8; 1024 * 512]; // read 512 KB
-                if let Ok(n) = scan_file.read(&mut scan_buf) {
-                    scanned_tables = Self::extract_table_names(&scan_buf[..n]);
+                        return Ok(Self {
+                            conn: Mutex::new(conn.into()),
+                            db_name: name,
+                            server_version: format!("Firebird Embedded (via {})", dll_path),
+                        });
+                    }
+                    Err(e) => {
+                        last_error = Some(format!("Tentativa Embedded ({}) falhou: {}", dll_path, e));
+                    }
                 }
             }
-
-            let name = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "DATABASE.FDB".into());
-            (Some(path), name, ods_desc, scanned_tables)
-        } else {
-            let host = config.host.clone().unwrap_or_else(|| "localhost".into());
-            let port = config.port.unwrap_or(3050);
-            let name = config.database.clone().unwrap_or_else(|| "DATABASE.FDB".into());
-            (None, name, format!("Firebird Server ({}:{})", host, port), Vec::new())
-        };
-
-        let mut tables = Map::new();
-
-        // Sample ERP tables commonly found in Firebird databases (ERP Delphi/CLIPP/Compufour)
-        let cols_clientes = json!([
-            { "name": "ID", "type": "INTEGER", "nullable": false, "isPrimaryKey": true },
-            { "name": "RAZAO_SOCIAL", "type": "VARCHAR(60)", "nullable": false, "isPrimaryKey": false },
-            { "name": "CNPJ_CPF", "type": "VARCHAR(18)", "nullable": false, "isPrimaryKey": false },
-            { "name": "CIDADE", "type": "VARCHAR(40)", "nullable": false, "isPrimaryKey": false },
-            { "name": "SALDO_DEVEDOR", "type": "NUMERIC(15,2)", "nullable": false, "isPrimaryKey": false },
-            { "name": "ATIVO", "type": "CHAR(1)", "nullable": false, "isPrimaryKey": false }
-        ]);
-
-        let rows_clientes = json!([
-            { "ID": 1, "RAZAO_SOCIAL": "Indústria Metalúrgica Concórdia Ltda", "CNPJ_CPF": "12.345.678/0001-90", "CIDADE": "Concórdia", "SALDO_DEVEDOR": 15420.50, "ATIVO": "S" },
-            { "ID": 2, "RAZAO_SOCIAL": "Distribuidora de Peças João Pessoa", "CNPJ_CPF": "98.765.432/0001-10", "CIDADE": "João Pessoa", "SALDO_DEVEDOR": 8920.00, "ATIVO": "S" },
-            { "ID": 3, "RAZAO_SOCIAL": "Comércio Silva & Associados", "CNPJ_CPF": "45.123.789/0001-55", "CIDADE": "São Paulo", "SALDO_DEVEDOR": 23150.75, "ATIVO": "S" }
-        ]);
-
-        let cols_produtos = json!([
-            { "name": "CODIGO", "type": "INTEGER", "nullable": false, "isPrimaryKey": true },
-            { "name": "DESCRICAO", "type": "VARCHAR(100)", "nullable": false, "isPrimaryKey": false },
-            { "name": "PRECO_VENDA", "type": "NUMERIC(15,2)", "nullable": false, "isPrimaryKey": false },
-            { "name": "ESTOQUE", "type": "NUMERIC(15,3)", "nullable": false, "isPrimaryKey": false }
-        ]);
-
-        let rows_produtos = json!([
-            { "CODIGO": 101, "DESCRICAO": "Rolamento de Esferas Blindado", "PRECO_VENDA": 45.80, "ESTOQUE": 120.000 },
-            { "CODIGO": 102, "DESCRICAO": "Válvula Reguladora de Pressão", "PRECO_VENDA": 320.00, "ESTOQUE": 15.000 },
-            { "CODIGO": 103, "DESCRICAO": "Sensor Indutivo de Precisão", "PRECO_VENDA": 189.90, "ESTOQUE": 48.000 }
-        ]);
-
-        tables.insert("CLIENTES".into(), json!({ "columns": cols_clientes, "rows": rows_clientes }));
-        tables.insert("PRODUTOS".into(), json!({ "columns": cols_produtos, "rows": rows_produtos }));
-
-        // Add any discovered user tables from the file
-        for user_tbl in discovered_tables {
-            if !tables.contains_key(&user_tbl) {
-                let generic_cols = json!([
-                    { "name": "ID", "type": "INTEGER", "nullable": false, "isPrimaryKey": true },
-                    { "name": "DESCRICAO", "type": "VARCHAR(100)", "nullable": true, "isPrimaryKey": false },
-                    { "name": "VALOR", "type": "NUMERIC(15,2)", "nullable": true, "isPrimaryKey": false }
-                ]);
-                let generic_rows = json!([
-                    { "ID": 1, "DESCRICAO": format!("Registro padrão em {}", user_tbl), "VALOR": 100.00 }
-                ]);
-                tables.insert(user_tbl, json!({ "columns": generic_cols, "rows": generic_rows }));
-            }
         }
 
-        Ok(Self {
-            file_path,
-            db_name,
-            server_version: version,
-            tables,
-        })
-    }
+        // Mode 2: TCP Wire protocol via pure Rust (works for servers and local Firebird service)
+        let host = config.host.as_deref().unwrap_or("127.0.0.1");
+        let port = config.port.unwrap_or(3050);
+        let db_target = candidate_path.or(config.database.as_deref()).unwrap_or("DATABASE.FDB");
 
-    fn extract_table_names(buf: &[u8]) -> Vec<String> {
-        let mut results = Vec::new();
-        let known_candidates = [
-            "PEDIDOS", "VENDAS", "FORNECEDORES", "ITENS_VENDA",
-            "CONFIG", "USUARIOS", "ESTOQUE", "CONTAS_RECEBER",
-            "CONTAS_PAGAR", "EMPRESA", "GRUPO_PRODUTOS"
-        ];
-        for candidate in &known_candidates {
-            let bytes = candidate.as_bytes();
-            if buf.windows(bytes.len()).any(|w| w == bytes) {
-                results.push((*candidate).to_string());
+        let mut pure_builder = builder_pure_rust();
+        let pure_res = pure_builder
+            .host(host)
+            .port(port)
+            .db_name(db_target)
+            .user(user)
+            .pass(password)
+            .charset(cs.clone())
+            .connect();
+
+        match pure_res {
+            Ok(conn) => {
+                let name = Path::new(db_target)
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_else(|| db_target.to_string());
+
+                Ok(Self {
+                    conn: Mutex::new(conn.into()),
+                    db_name: name,
+                    server_version: format!("Firebird ({}:{}) [Wire Protocol]", host, port),
+                })
+            }
+            Err(e) => {
+                let detail = if let Some(prev) = last_error {
+                    format!("{}; Falha via protocolo Wire TCP ({}:{}): {}", prev, host, port, e)
+                } else {
+                    format!("Falha ao conectar no Firebird ({}:{}): {}", host, port, e)
+                };
+                Err(detail)
             }
         }
-        results
     }
 
     pub fn list_tables(&self) -> Result<Vec<TableInfo>, String> {
-        let mut list = Vec::new();
-        for (name, data) in &self.tables {
-            let row_count = data.get("rows").and_then(|r| r.as_array()).map(|a| a.len() as i64);
-            list.push(TableInfo {
-                name: name.clone(),
-                schema: Some("firebird".into()),
-                row_count,
-                table_type: "table".into(),
-            });
+        let mut conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let sql = r#"
+            SELECT TRIM(RDB$RELATION_NAME) AS TABLE_NAME
+            FROM RDB$RELATIONS
+            WHERE (RDB$SYSTEM_FLAG = 0 OR RDB$SYSTEM_FLAG IS NULL)
+              AND RDB$VIEW_BLR IS NULL
+            ORDER BY RDB$RELATION_NAME ASC;
+        "#;
+
+        let rows: Vec<Row> = conn
+            .query(sql, ())
+            .map_err(|e| format!("Erro ao listar tabelas do Firebird: {}", e))?;
+
+        let mut tables = Vec::new();
+        for r in rows {
+            if let Some(col) = r.cols.first() {
+                if let SqlType::Text(t) = &col.value {
+                    tables.push(TableInfo {
+                        name: t.trim().to_string(),
+                        schema: Some("firebird".into()),
+                        row_count: None,
+                        table_type: "table".into(),
+                    });
+                }
+            }
         }
-        Ok(list)
+
+        let view_sql = r#"
+            SELECT TRIM(RDB$RELATION_NAME) AS VIEW_NAME
+            FROM RDB$RELATIONS
+            WHERE (RDB$SYSTEM_FLAG = 0 OR RDB$SYSTEM_FLAG IS NULL)
+              AND RDB$VIEW_BLR IS NOT NULL
+            ORDER BY RDB$RELATION_NAME ASC;
+        "#;
+        if let Ok(v_rows) = conn.query::<(), Row>(view_sql, ()) {
+            for r in v_rows {
+                if let Some(col) = r.cols.first() {
+                    if let SqlType::Text(t) = &col.value {
+                        tables.push(TableInfo {
+                            name: t.trim().to_string(),
+                            schema: Some("firebird".into()),
+                            row_count: None,
+                            table_type: "view".into(),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(tables)
     }
 
     pub fn describe_table(&self, table_name: &str) -> Result<Vec<ColumnInfo>, String> {
-        let table = self.tables.get(table_name).or_else(|| self.tables.values().next());
-        if let Some(t) = table {
-            if let Some(cols) = t.get("columns").and_then(|c| c.as_array()) {
-                let parsed: Result<Vec<ColumnInfo>, _> = serde_json::from_value(Value::Array(cols.clone()));
-                return parsed.map_err(|e| e.to_string());
-            }
+        let mut conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let sql = format!(
+            r#"
+            SELECT 
+                TRIM(rf.RDB$FIELD_NAME) AS FIELD_NAME,
+                f.RDB$FIELD_TYPE,
+                COALESCE(rf.RDB$NULL_FLAG, 0) AS IS_NOT_NULL
+            FROM RDB$RELATION_FIELDS rf
+            JOIN RDB$FIELDS f ON rf.RDB$FIELD_SOURCE = f.RDB$FIELD_NAME
+            WHERE TRIM(rf.RDB$RELATION_NAME) = UPPER('{}')
+            ORDER BY rf.RDB$FIELD_POSITION ASC;
+            "#,
+            table_name.replace('\'', "''")
+        );
+
+        let rows: Vec<Row> = conn
+            .query(&sql, ())
+            .map_err(|e| format!("Erro ao descrever tabela Firebird: {}", e))?;
+
+        let mut cols = Vec::new();
+        for r in rows {
+            let col_name = r.cols.get(0).and_then(|c| match &c.value {
+                SqlType::Text(t) => Some(t.trim().to_string()),
+                _ => None,
+            }).unwrap_or_default();
+
+            let type_code = r.cols.get(1).and_then(|c| match &c.value {
+                SqlType::Integer(i) => Some(*i),
+                _ => None,
+            }).unwrap_or(0);
+
+            let not_null = r.cols.get(2).and_then(|c| match &c.value {
+                SqlType::Integer(i) => Some(*i == 1),
+                _ => None,
+            }).unwrap_or(false);
+
+            let type_str = match type_code {
+                7 => "SMALLINT",
+                8 => "INTEGER",
+                10 => "FLOAT",
+                12 => "DATE",
+                13 => "TIME",
+                14 => "CHAR",
+                16 => "BIGINT",
+                27 => "DOUBLE PRECISION",
+                35 => "TIMESTAMP",
+                37 => "VARCHAR",
+                261 => "BLOB",
+                _ => "VARCHAR",
+            };
+
+            cols.push(ColumnInfo {
+                name: col_name,
+                col_type: type_str.into(),
+                nullable: !not_null,
+                is_primary_key: false,
+            });
         }
-        Err(format!("Tabela Firebird '{}' não encontrada", table_name))
+        Ok(cols)
     }
 
-    pub fn execute_query(&self, _sql: &str) -> Result<QueryResult, String> {
+    pub fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
-        let (_name, data) = self.tables.iter().next().ok_or_else(|| "Nenhuma tabela disponível".to_string())?;
-        let rows = data.get("rows").and_then(|r| r.as_array()).cloned().unwrap_or_default();
-        let columns = if let Some(first) = rows.first().and_then(|r| r.as_object()) {
-            first.keys().cloned().collect()
-        } else {
-            vec![]
-        };
+        let mut conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let rows: Vec<Row> = conn
+            .query(sql, ())
+            .map_err(|e| format!("Erro ao executar query Firebird: {}", e))?;
+        let execution_time_ms = start.elapsed().as_millis();
 
-        let count = rows.len();
+        let mut columns = Vec::new();
+        if let Some(first) = rows.first() {
+            columns = first.cols.iter().map(|c| c.name.to_string()).collect();
+        }
+
+        let mut res_rows = Vec::new();
+        for r in rows {
+            let mut map = Map::new();
+            for col in r.cols {
+                map.insert(col.name.to_string(), fb_sql_type_to_json(&col.value));
+            }
+            res_rows.push(Value::Object(map));
+        }
+
+        let count = res_rows.len();
         Ok(QueryResult {
             columns,
-            rows,
+            rows: res_rows,
             row_count: count,
             total_count: Some(count as i64),
             has_more: false,
-            execution_time_ms: start.elapsed().as_millis(),
+            execution_time_ms,
             statement_type: Some("SELECT".into()),
             offset: None,
             limit: None,
@@ -204,30 +305,10 @@ impl FirebirdEngine {
     }
 
     pub fn get_table_data(&self, table_name: &str, limit: usize, offset: usize) -> Result<QueryResult, String> {
-        let start = Instant::now();
-        let data = self.tables.get(table_name).or_else(|| self.tables.values().next()).ok_or_else(|| "Tabela não encontrada".to_string())?;
-        let rows = data.get("rows").and_then(|r| r.as_array()).cloned().unwrap_or_default();
-        let columns = if let Some(first) = rows.first().and_then(|r| r.as_object()) {
-            first.keys().cloned().collect()
-        } else {
-            vec![]
-        };
-
-        let total = rows.len();
-        let sliced: Vec<Value> = rows.into_iter().skip(offset).take(limit).collect();
-        let count = sliced.len();
-        let has_more = (offset + count) < total;
-
-        Ok(QueryResult {
-            columns,
-            rows: sliced,
-            row_count: count,
-            total_count: Some(total as i64),
-            has_more,
-            execution_time_ms: start.elapsed().as_millis(),
-            statement_type: Some("SELECT".into()),
-            offset: Some(offset),
-            limit: Some(limit),
-        })
+        let sql = format!(
+            "SELECT FIRST {} SKIP {} * FROM \"{}\";",
+            limit, offset, table_name
+        );
+        self.execute_query(&sql)
     }
 }
