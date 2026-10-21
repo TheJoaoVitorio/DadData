@@ -237,18 +237,92 @@ impl MssqlEngine {
     }
 
     pub async fn get_table_data(&self, table_name: &str, schema: Option<&str>, limit: usize, offset: usize) -> Result<QueryResult, String> {
-        let s = schema.unwrap_or("dbo");
-        let sql = format!(
-            "SELECT * FROM [{}].[{}] ORDER BY (SELECT NULL) OFFSET {} ROWS FETCH NEXT {} ROWS ONLY;",
-            s, table_name, offset, limit
+        let start = Instant::now();
+        let s = schema.filter(|sch| !sch.trim().is_empty()).unwrap_or("dbo");
+        let safe_schema = s.replace(']', "]]");
+        let safe_table = table_name.replace(']', "]]");
+        let mut client = self.client.lock().await;
+
+        // 1. Total row count query
+        let count_sql = format!(
+            "SELECT CAST(COUNT_BIG(*) AS VARCHAR(32)) FROM [{}].[{}];",
+            safe_schema, safe_table
         );
-        let fallback_sql = format!(
-            "SELECT TOP {} * FROM [{}].[{}];",
-            limit, s, table_name
-        );
-        match self.execute_query(&sql).await {
-            Ok(res) => Ok(res),
-            Err(_) => self.execute_query(&fallback_sql).await,
+        let total_count: Option<i64> = match client.simple_query(&count_sql).await {
+            Ok(stream) => {
+                if let Ok(rows) = stream.into_first_result().await {
+                    rows.first().and_then(|r| {
+                        if let Some(s) = r.get::<&str, _>(0) {
+                            s.parse::<i64>().ok()
+                        } else if let Some(n) = r.get::<i64, _>(0) {
+                            Some(n)
+                        } else if let Some(n) = r.get::<i32, _>(0) {
+                            Some(n as i64)
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        };
+
+        // 2. Data chunk query: use TOP for initial batch, OFFSET/FETCH for subsequent pages
+        let rows = if offset == 0 {
+            let sql = format!(
+                "SELECT TOP {} * FROM [{}].[{}];",
+                limit, safe_schema, safe_table
+            );
+            let stream = client.simple_query(&sql).await.map_err(|e| {
+                format!("Erro ao buscar dados da tabela '{}': {}", table_name, e)
+            })?;
+            stream.into_first_result().await.map_err(|e| e.to_string())?
+        } else {
+            let sql = format!(
+                "SELECT * FROM [{}].[{}] ORDER BY (SELECT NULL) OFFSET {} ROWS FETCH NEXT {} ROWS ONLY;",
+                safe_schema, safe_table, offset, limit
+            );
+            let stream = client.simple_query(&sql).await.map_err(|e| {
+                format!("Erro ao paginar dados da tabela '{}' (offset {}): {}", table_name, offset, e)
+            })?;
+            stream.into_first_result().await.map_err(|e| e.to_string())?
+        };
+
+        let execution_time_ms = start.elapsed().as_millis();
+
+        let columns: Vec<String> = if let Some(first) = rows.first() {
+            first.columns().iter().map(|c| c.name().to_string()).collect()
+        } else {
+            Vec::new()
+        };
+
+        let mut res_rows = Vec::new();
+        for r in rows {
+            let mut map = Map::new();
+            for (col_name, val) in columns.iter().zip(r.into_iter()) {
+                map.insert(col_name.clone(), mssql_col_to_json(val));
+            }
+            res_rows.push(Value::Object(map));
         }
+
+        let count = res_rows.len();
+        let has_more = match total_count {
+            Some(t) => (offset + count) < t as usize,
+            None => count == limit,
+        };
+
+        Ok(QueryResult {
+            columns,
+            rows: res_rows,
+            row_count: count,
+            total_count,
+            has_more,
+            execution_time_ms,
+            statement_type: Some("SELECT".into()),
+            offset: Some(offset),
+            limit: Some(limit),
+        })
     }
 }

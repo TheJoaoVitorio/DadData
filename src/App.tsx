@@ -139,6 +139,7 @@ export const App: React.FC = () => {
   };
 
   const FETCH_CHUNK_SIZE = 300;
+  const isFetchingMoreRef = useRef(false);
 
   // Helper to load table data and metadata into a specific tab (supports continuous on-demand infinite scroll fetching)
   const loadTableDataForTab = async (
@@ -213,22 +214,27 @@ export const App: React.FC = () => {
 
   const handleLoadMore = async () => {
     const currentTab = tabs.find(t => t.id === activeTabId);
-    if (!currentTab || !currentTab.tableName || !activeConnection || currentTab.isLoadingMore) return;
+    if (!currentTab || !currentTab.tableName || !activeConnection || currentTab.isLoadingMore || isFetchingMoreRef.current) return;
     if (currentTab.queryResult && !currentTab.queryResult.hasMore) return;
 
+    isFetchingMoreRef.current = true;
     const currentRowsCount = currentTab.queryResult?.rows?.length || 0;
 
-    await loadTableDataForTab(
-      currentTab.id,
-      currentTab.tableName,
-      activeConnection.id,
-      currentTab.schema,
-      {
-        limit: FETCH_CHUNK_SIZE,
-        offset: currentRowsCount,
-        append: true
-      }
-    );
+    try {
+      await loadTableDataForTab(
+        currentTab.id,
+        currentTab.tableName,
+        activeConnection.id,
+        currentTab.schema,
+        {
+          limit: FETCH_CHUNK_SIZE,
+          offset: currentRowsCount,
+          append: true
+        }
+      );
+    } finally {
+      isFetchingMoreRef.current = false;
+    }
   };
 
   const handleConnect = async (config: ConnectionConfig) => {

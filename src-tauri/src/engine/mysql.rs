@@ -210,7 +210,57 @@ impl MysqlEngine {
     }
 
     pub async fn get_table_data(&self, table_name: &str, limit: usize, offset: usize) -> Result<QueryResult, String> {
-        let sql = format!("SELECT * FROM `{}` LIMIT {} OFFSET {};", table_name, limit, offset);
-        self.execute_query(&sql).await
+        let start = Instant::now();
+        let mut conn = self.pool.get_conn().await.map_err(|e| e.to_string())?;
+        let safe_table = table_name.replace('`', "``");
+
+        // 1. Total row count query
+        let count_sql = format!("SELECT COUNT(*) FROM `{}`;", safe_table);
+        let count_res: Result<Vec<mysql_async::Row>, _> = conn.query(&count_sql).await;
+        let total_count: Option<i64> = count_res.ok().and_then(|rows| {
+            rows.first().and_then(|r| {
+                r.get_opt::<i64, _>(0).and_then(Result::ok)
+                    .or_else(|| r.get_opt::<i32, _>(0).and_then(Result::ok).map(|n| n as i64))
+                    .or_else(|| r.get_opt::<String, _>(0).and_then(Result::ok).and_then(|s| s.parse::<i64>().ok()))
+            })
+        });
+
+        // 2. Fetch data chunk
+        let sql = format!("SELECT * FROM `{}` LIMIT {} OFFSET {};", safe_table, limit, offset);
+        let rows: Vec<mysql_async::Row> = conn.query(&sql).await.map_err(|e| e.to_string())?;
+        let execution_time_ms = start.elapsed().as_millis();
+
+        let mut columns = Vec::new();
+        if let Some(first) = rows.first() {
+            columns = first.columns_ref().iter().map(|c| c.name_str().to_string()).collect();
+        }
+
+        let mut res_rows = Vec::new();
+        for r in &rows {
+            let mut map = Map::new();
+            for (i, c) in r.columns_ref().iter().enumerate() {
+                let raw_val = r.get_opt::<mysql_async::Value, _>(i).and_then(Result::ok).unwrap_or(mysql_async::Value::NULL);
+                map.insert(c.name_str().to_string(), mysql_val_to_json(raw_val));
+            }
+            res_rows.push(Value::Object(map));
+        }
+
+        let count = res_rows.len();
+        let has_more = match total_count {
+            Some(t) => (offset + count) < t as usize,
+            None => count == limit,
+        };
+
+        Ok(QueryResult {
+            columns,
+            rows: res_rows,
+            row_count: count,
+            total_count,
+            has_more,
+            execution_time_ms,
+            statement_type: Some("SELECT".into()),
+            offset: Some(offset),
+            limit: Some(limit),
+        })
     }
 }

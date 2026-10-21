@@ -444,11 +444,23 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
             {/* Fetching Next Batch Indicator */}
             {queryResult.hasMore && (
-              <tr className="bg-amber-50/40">
+              <tr
+                onClick={() => !isLoadingMore && onLoadMore?.()}
+                className="bg-amber-50/50 hover:bg-amber-100/60 cursor-pointer transition-colors"
+                title="Clique ou role para carregar mais"
+              >
                 <td colSpan={columns.length + 2} className="py-3 text-center">
                   <div className="flex items-center justify-center gap-2 text-xs text-amber-950 font-medium">
-                    <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                    <span>Carregando mais registros conforme você rola a tabela...</span>
+                    {isLoadingMore ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                        <span>Carregando próximos registros ({totalRows.toLocaleString()} de {queryResult.totalCount?.toLocaleString() ?? '...'})</span>
+                      </>
+                    ) : (
+                      <span className="text-amber-900 font-semibold">
+                        Role para baixo ou clique aqui para carregar mais registros ({totalRows.toLocaleString()} de {queryResult.totalCount?.toLocaleString() ?? '...'})
+                      </span>
+                    )}
                   </div>
                 </td>
               </tr>

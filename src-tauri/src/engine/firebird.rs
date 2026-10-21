@@ -305,10 +305,82 @@ impl FirebirdEngine {
     }
 
     pub fn get_table_data(&self, table_name: &str, limit: usize, offset: usize) -> Result<QueryResult, String> {
+        let start = Instant::now();
+        let mut conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let safe_table = table_name.replace('"', "\"\"");
+
+        // 1. Total row count query
+        let count_sql = format!("SELECT COUNT(*) FROM \"{}\";", safe_table);
+        let count_rows: Result<Vec<Row>, _> = conn.query(&count_sql, ());
+        let total_count: Option<i64> = match count_rows {
+            Ok(rows) => rows.first().and_then(|r| r.cols.first()).and_then(|c| match &c.value {
+                SqlType::Integer(i) => Some(*i as i64),
+                SqlType::Int128(i) => Some(*i as i64),
+                SqlType::Text(t) => t.trim().parse::<i64>().ok(),
+                _ => None,
+            }),
+            Err(_) => {
+                let unquoted = format!("SELECT COUNT(*) FROM {};", table_name);
+                conn.query::<(), Row>(&unquoted, ()).ok().and_then(|rows| {
+                    rows.first().and_then(|r| r.cols.first()).and_then(|c| match &c.value {
+                        SqlType::Integer(i) => Some(*i as i64),
+                        SqlType::Int128(i) => Some(*i as i64),
+                        SqlType::Text(t) => t.trim().parse::<i64>().ok(),
+                        _ => None,
+                    })
+                })
+            }
+        };
+
+        // 2. Data chunk query with FIRST limit SKIP offset
         let sql = format!(
             "SELECT FIRST {} SKIP {} * FROM \"{}\";",
-            limit, offset, table_name
+            limit, offset, safe_table
         );
-        self.execute_query(&sql)
+        let rows_res: Result<Vec<Row>, _> = conn.query(&sql, ());
+        let rows: Vec<Row> = match rows_res {
+            Ok(r) => r,
+            Err(_) => {
+                let unquoted = format!(
+                    "SELECT FIRST {} SKIP {} * FROM {};",
+                    limit, offset, table_name
+                );
+                conn.query(&unquoted, ()).map_err(|e| format!("Erro ao buscar dados da tabela Firebird: {}", e))?
+            }
+        };
+
+        let execution_time_ms = start.elapsed().as_millis();
+
+        let mut columns = Vec::new();
+        if let Some(first) = rows.first() {
+            columns = first.cols.iter().map(|c| c.name.to_string()).collect();
+        }
+
+        let mut res_rows = Vec::new();
+        for r in rows {
+            let mut map = Map::new();
+            for col in r.cols {
+                map.insert(col.name.to_string(), fb_sql_type_to_json(&col.value));
+            }
+            res_rows.push(Value::Object(map));
+        }
+
+        let count = res_rows.len();
+        let has_more = match total_count {
+            Some(t) => (offset + count) < t as usize,
+            None => count == limit,
+        };
+
+        Ok(QueryResult {
+            columns,
+            rows: res_rows,
+            row_count: count,
+            total_count,
+            has_more,
+            execution_time_ms,
+            statement_type: Some("SELECT".into()),
+            offset: Some(offset),
+            limit: Some(limit),
+        })
     }
 }
