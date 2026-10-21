@@ -18,7 +18,7 @@ import {
   ExportOptions
 } from '@shared/types/database';
 import { X, CheckCircle2, AlertCircle, Monitor, Plus, RefreshCw } from 'lucide-react';
-import { safeApi, isDesktopElectron } from './services/api-client';
+import { safeApi, isDesktop } from './services/api-client';
 
 export interface TabItem {
   id: string;
@@ -695,7 +695,7 @@ export const App: React.FC = () => {
             </svg>
           </div>
           <span className="font-extrabold text-sm tracking-tight text-zinc-950">DadData</span>
-          {!isDesktopElectron && (
+          {!isDesktop && (
             <span className="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/40 border border-zinc-950/15">
               Web Sandbox
             </span>

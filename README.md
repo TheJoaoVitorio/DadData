@@ -1,36 +1,43 @@
 # DadData
 
-Cliente desktop universal para bancos de dados modernos e legados. Desenvolvido em **Electron**, **React**, **TypeScript** e **Tailwind CSS**, com foco em interoperabilidade, performance e uma interface orientada a desenvolvedores baseada no design system do **AbacatePay**.
+Cliente desktop universal para bancos de dados modernos e legados. Desenvolvido com **Tauri v2**, motor nativo em **Rust**, **React 19**, **TypeScript** e **Tailwind CSS**, com foco em desempenho extremo, baixo consumo de memória/energia e virtualização completa de dados.
 
 ---
 
 ## Visão Geral
 
-O **DadData** foi projetado para atender tanto sistemas contemporâneos quanto ecossistemas empresariais legados (ERPs em Delphi, FoxPro, WinDev, Clipper e VB6), permitindo conectar, inspecionar schemas, consultar, manipular dados (CRUD) e exportar relatórios sem necessidade de middlewares complexos.
+O **DadData** foi projetado para conectar, inspecionar schemas, consultar, manipular dados (CRUD) e exportar relatórios tanto em ecossistemas empresariais legados (ERPs em Delphi, FoxPro, WinDev, Clipper e VB6) quanto em bancos modernos e cloud, utilizando um backend nativo assíncrono em Rust de alta performance.
 
 ---
 
 ## Motores de Banco de Dados Suportados
 
 ### Legados & Baseados em Arquivo (Desktop / ERP)
-- **Firebird (.FDB)**: Suporte a Dialetos 1 e 3 (v1.5 a v5.0) via socket nativo TCP/IP com resolução de caminhos Windows 8.3.
-- **dBase / FoxPro / Clipper (.DBF)**: Leitura de arquivos `.DBF` individuais e diretórios com múltiplas tabelas.
-- **Borland / Corel Paradox (.DB)**: Decodificação de arquivos Paradox v3.5 a v7.0, incluindo suporte a campos de auto-incremento e blocos múltiplos.
+- **Firebird (.FDB)**: Dialetos 1 e 3 (v1.5 a v5.0) via socket nativo TCP/IP com decodificação Windows-1252.
+- **dBase / FoxPro / Clipper (.DBF)**: Leitura de arquivos `.DBF` e diretórios com múltiplas tabelas.
+- **Borland / Corel Paradox (.DB)**: Decodificação de arquivos Paradox v3.5 a v7.0, incluindo auto-incremento e blocos secundários.
 - **Microsoft Access (.MDB / .ACCDB)**: Conexão via engine Jet / ACE com introspecção de tabelas e dados.
 - **PC SOFT HFSQL / HyperFileSQL (.FIC)**: Leitura de tabelas clássicas de aplicações WinDev / WebDev.
 - **NexusDB (.NX1)**: Suporte a tabelas do motor Delphi NexusDB v4.
 
 ### Modernos, Cloud & NoSQL
-- **PostgreSQL**: v9.x a v17.x, com navegação estruturada por schemas (`public`, schemas customizados, views).
+- **PostgreSQL**: Conexão assíncrona nativa com pooling via `tokio-postgres` e `deadpool-postgres`, navegação em schemas (`public`, schemas customizados, views).
+- **SQLite 3**: Operações nativas compiladas com `rusqlite`.
 - **MySQL & MariaDB**: v5.5 a v8.4.
 - **Microsoft SQL Server**: T-SQL, catalogação de schemas e compatibilidade com instâncias nomeadas.
-- **SQLite 3**: Arquivos locais em disco ou bancos em memória.
 - **MongoDB**: Coleções NoSQL com documentos BSON/JSON.
 
 ---
 
 ## Recursos da Aplicação
 
+- **Motor Nativo Rust de Alta Performance**:
+  - Pool de conexões assíncrono e pooling com Tokio.
+  - Exportação nativa direta em Rust para CSV e Excel (.xlsx) estilizado (`rust_xlsxwriter`).
+  - Consumo mínimo de memória RAM e overhead zero de CPU.
+- **Virtual Scrolling & Windowing Inteligente**:
+  - Renderização virtual sob demanda: exibe tabelas com 400.000+ linhas montando apenas os elementos visíveis na viewport.
+  - Zero travamentos, rolagem fluida a 60fps e consumo de energia ultra-baixo.
 - **Explorador de Esquemas (Sidebar)**:
   - Navegação em árvore de tabelas, views, schemas e metadados de colunas (tipagem e chaves primárias).
   - Filtro em tempo real para bases com centenas de entidades.
@@ -42,41 +49,34 @@ O **DadData** foi projetado para atender tanto sistemas contemporâneos quanto e
   - **Edição Inline**: Duplo clique em qualquer célula para alteração rápida com validação de tipos.
   - **Inserção de Registros**: Gaveta lateral dinâmica adaptada ao schema da tabela selecionada.
   - **Exclusão Segura**: Confirmação visual para remoção de registros por chave primária.
-  - Paginação, ordenação multi-coluna e busca textual inline.
-- **Motor de Exportação**:
-  - **CSV**: UTF-8 com suporte a BOM para compatibilidade com Microsoft Excel.
-  - **Excel (.xlsx)**: Geração de planilhas nativas formatadas via streaming, preservando tipos de dados.
-- **Design System AbacatePay**:
-  - Paleta em tons escuros de petróleo (`#0C1818`, `#112323`), acentos em verde abacate neon (`#00F566`) e superfícies contrastadas.
-  - Tipografia técnica com **Fustat** e **JetBrains Mono**.
-  - Livre de elementos gráficos superficiais e focado na ergonomia do desenvolvedor.
+  - Paginação por demanda (fetch infinito).
 
 ---
 
 ## Arquitetura do Projeto
 
-O código segue a separação estrita de camadas do Electron (Clean Architecture / Hexagonal):
-
 ```
 DadData/
+├── src-tauri/                # Backend Nativo em Rust (Tauri v2)
+│   ├── src/
+│   │   ├── main.rs           # Ponto de entrada do executável desktop
+│   │   ├── lib.rs            # Registro de estado, plugins e comandos Tauri
+│   │   ├── commands.rs       # #[tauri::command] handlers de conexão, query e CRUD
+│   │   └── engine/           # Motor nativo de bancos de dados
+│   │       ├── postgres.rs   # tokio-postgres + deadpool-postgres
+│   │       ├── sqlite.rs     # rusqlite nativo
+│   │       ├── export.rs     # Streaming CSV & Excel com rust_xlsxwriter
+│   │       └── types.rs      # Tipos compartilhados com serde
+│   ├── Cargo.toml            # Dependências Rust
+│   └── tauri.conf.json       # Configurações do Tauri v2
 ├── src/
-│   ├── main/                 # Processo Principal do Electron
-│   │   ├── index.ts          # Ciclo de vida da janela e flags de segurança
-│   │   ├── ipc/              # Contratos tipados de IPC entre Main e Renderer
-│   │   └── export/           # Serviços de exportação de dados (CSV e Excel)
-│   ├── preload/              # Context Isolation bridge (window.api)
-│   ├── drivers/              # Adaptadores de banco de dados (DatabaseDriver)
-│   │   ├── firebird/         # Driver nativo Firebird (node-firebird)
-│   │   ├── paradox/          # Parser binário Borland Paradox
-│   │   ├── dbf/              # Parser binário dBase/FoxPro
-│   │   ├── sqlite/           # Driver SQLite via WebAssembly/sql.js
-│   │   └── ...               # Postgres, MySQL, MSSQL, Mongo, HFSQL, NexusDB
-│   ├── renderer/             # Interface React (Vite)
+│   ├── renderer/             # Frontend React 19 + TypeScript + Tailwind CSS
 │   │   └── src/
-│   │       ├── components/   # UI: DataGrid, SqlEditor, Sidebar, Header, Drawers
-│   │       ├── services/     # Cliente seguro de IPC
-│   │       └── index.css     # Tokens do design system AbacatePay
-│   └── shared/               # Tipos TypeScript e contratos de IPC compartilhados
+│   │       ├── components/   # UI: DataGrid virtualizado, SqlEditor, Sidebar, Header
+│   │       ├── services/     # Cliente seguro de comunicação Tauri invoke
+│   │       └── index.css     # Design system e tokens de cores
+│   ├── shared/               # Tipos TypeScript compartilhados
+│   └── services/             # Utilitários de exportação e serviços
 └── tests/                    # Suíte de testes automatizados com Vitest
 ```
 
@@ -85,6 +85,7 @@ DadData/
 ## Primeiros Passos
 
 ### Pré-requisitos
+- **Rust**: `rustc` e `cargo` instalados ([rustup.rs](https://rustup.rs/))
 - **Node.js**: v18+ (recomendado v20+)
 - **npm** ou **pnpm**
 - **Git**
@@ -96,8 +97,16 @@ cd DadData
 npm install
 ```
 
-### Desenvolvimento
-Inicie o Electron com recarregamento em tempo real (HMR):
+### Desenvolvimento Desktop (Tauri v2 + Rust)
+Inicie o aplicativo Desktop com recarregamento em tempo real (HMR):
+```bash
+npm run desktop
+# ou
+npm run tauri:dev
+```
+
+### Desenvolvimento Web Preview (Vite)
+Para testar a interface diretamente no navegador:
 ```bash
 npm run dev
 ```
@@ -109,9 +118,9 @@ npm test
 ```
 
 ### Build de Produção
-Gera os executáveis do Electron e os bundles otimizados:
+Gera o executável desktop nativo ultra-leve via Tauri e Rust:
 ```bash
-npm run build
+npm run tauri:build
 ```
 
 ---

@@ -1,0 +1,29 @@
+[package]
+name = "daddata"
+version = "1.0.0"
+description = "Universal Modern & Legacy Database Client"
+authors = ["TheJoaoVitorio <joaovtr999x@gmail.com>"]
+edition = "2021"
+
+[lib]
+name = "daddata_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }
+tokio = { version = "1", features = ["full"] }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
+deadpool-postgres = "0.14"
+mysql_async = { version = "0.35", default-features = false, features = ["default-rustls", "chrono"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+csv = "1"
+rust_xlsxwriter = "0.8"
+uuid = { version = "1", features = ["v4"] }

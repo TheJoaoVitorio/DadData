@@ -16,6 +16,9 @@ import { MagicCard } from '../magicui/magic-card';
 import { DotPattern } from '../magicui/dot-pattern';
 import { AnimatedGradientText } from '../magicui/animated-gradient-text';
 
+const ROW_HEIGHT = 34; // Pixel height per table row
+const OVERSCAN = 12;   // Extra rows rendered above/below visible viewport for ultra-smooth scrolling
+
 interface DataGridProps {
   title: string;
   queryResult: QueryResult | null;
@@ -49,38 +52,44 @@ export const DataGrid: React.FC<DataGridProps> = ({
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
 
+  // High-performance virtual scrolling state
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(600);
   const containerRef = useRef<HTMLDivElement>(null);
-  const sentinelRef = useRef<HTMLTableRowElement>(null);
+  const rafIdRef = useRef<number | null>(null);
 
-  // Infinite scroll on-demand fetch as user scrolls down
+  // ResizeObserver to detect real container height dynamically
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const updateSize = () => {
+      if (containerRef.current) {
+        setContainerHeight(containerRef.current.clientHeight || 600);
+      }
+    };
+    updateSize();
+    const ro = new ResizeObserver(updateSize);
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Scroll listener throttled via requestAnimationFrame (Zero layout thrashing, 60/120 FPS)
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - scrollTop - clientHeight < 350) {
+    const { scrollTop: currentScrollTop, scrollHeight, clientHeight } = e.currentTarget;
+
+    if (rafIdRef.current === null) {
+      rafIdRef.current = requestAnimationFrame(() => {
+        setScrollTop(currentScrollTop);
+        rafIdRef.current = null;
+      });
+    }
+
+    // Auto-fetch next batch when approaching bottom (within 400px of virtual end)
+    if (scrollHeight - currentScrollTop - clientHeight < 400) {
       if (queryResult?.hasMore && !isLoadingMore && onLoadMore) {
         onLoadMore();
       }
     }
   };
-
-  // Sentinel IntersectionObserver for smooth auto-triggering
-  useEffect(() => {
-    if (!sentinelRef.current || !queryResult?.hasMore || isLoadingMore || !onLoadMore) return;
-
-    const observer = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting) {
-          onLoadMore();
-        }
-      },
-      {
-        root: containerRef.current,
-        rootMargin: '300px'
-      }
-    );
-
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [queryResult?.hasMore, isLoadingMore, onLoadMore, queryResult?.rows?.length]);
 
   if (isLoading) {
     return (
@@ -152,6 +161,15 @@ export const DataGrid: React.FC<DataGridProps> = ({
   }
 
   const totalRows = rows.length;
+
+  // Virtual Windowing Math: only mount ~35 DOM rows at any time regardless of totalRows
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + OVERSCAN * 2;
+  const endIndex = Math.min(totalRows, startIndex + visibleCount);
+
+  const topSpacerHeight = startIndex * ROW_HEIGHT;
+  const bottomSpacerHeight = Math.max(0, (totalRows - endIndex) * ROW_HEIGHT);
+  const visibleRows = rows.slice(startIndex, endIndex);
 
   const handleStartEdit = (rowIdx: number, colName: string, currentVal: any) => {
     setEditingCell({ rowIdx, colName });
@@ -272,7 +290,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
         </div>
       </div>
 
-      {/* Table Container with Infinite Scroll */}
+      {/* Virtual Table Scroll Container */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -280,9 +298,9 @@ export const DataGrid: React.FC<DataGridProps> = ({
       >
         <table className="w-full text-left border-collapse text-xs">
           {/* Table Header */}
-          <thead className="bg-zinc-50 sticky top-0 z-10 border-b border-zinc-200">
-            <tr>
-              <th className="py-2 px-2.5 w-10 text-center text-zinc-400 font-mono text-[10px]">#</th>
+          <thead className="bg-zinc-50 sticky top-0 z-20 border-b border-zinc-200">
+            <tr style={{ height: `${ROW_HEIGHT}px` }}>
+              <th className="py-2 px-2.5 w-12 text-center text-zinc-400 font-mono text-[10px]">#</th>
               {columns.map(col => {
                 const isPk = col === pkCol;
                 return (
@@ -307,106 +325,126 @@ export const DataGrid: React.FC<DataGridProps> = ({
             </tr>
           </thead>
 
-          {/* Table Body - Continuous On-Demand Infinite Rows */}
+          {/* Virtual Windowed Table Body: Only ~35 DOM rows active at any time */}
           <tbody className="divide-y divide-zinc-100">
-            {rows.length === 0 ? (
+            {totalRows === 0 ? (
               <tr>
                 <td colSpan={columns.length + 2} className="text-center py-10 text-zinc-400">
                   Nenhum registro encontrado.
                 </td>
               </tr>
             ) : (
-              rows.map((row, rIdx) => {
-                return (
-                  <tr
-                    key={rIdx}
-                    className="hover:bg-amber-50/30 transition-colors group"
-                  >
-                    <td className="py-1.5 px-2.5 text-center text-zinc-400 font-mono text-[10px]">
-                      {rIdx + 1}
-                    </td>
-
-                    {columns.map(col => {
-                      const isEditing =
-                        editingCell?.rowIdx === rIdx && editingCell?.colName === col;
-                      const val = row[col];
-
-                      return (
-                        <td
-                          key={col}
-                          onDoubleClick={() => handleStartEdit(rIdx, col, val)}
-                          className="py-1.5 px-2.5 text-zinc-800 font-normal relative"
-                        >
-                          {isEditing ? (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="text"
-                                autoFocus
-                                value={editValue}
-                                onChange={e => setEditValue(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') handleSaveEdit(row);
-                                  if (e.key === 'Escape') setEditingCell(null);
-                                }}
-                                className="w-full px-2 py-0.5 bg-white border border-amber-400 rounded-lg text-xs focus:outline-none ring-2 ring-amber-400/20 font-mono text-zinc-900"
-                              />
-                              <button
-                                onClick={() => handleSaveEdit(row)}
-                                className="p-1 rounded bg-[#FACC15] text-zinc-950 hover:bg-[#EAB308] cursor-pointer"
-                              >
-                                <Check className="w-3 h-3 stroke-[2.5]" />
-                              </button>
-                              <button
-                                onClick={() => setEditingCell(null)}
-                                className="p-1 rounded bg-zinc-200 text-zinc-700 hover:bg-zinc-300 cursor-pointer"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div
-                              title="Dê um duplo clique para editar"
-                              className="cursor-pointer truncate max-w-[280px] font-mono text-[11px]"
-                            >
-                              {val === null || val === undefined ? (
-                                <span className="text-zinc-300 italic">null</span>
-                              ) : typeof val === 'boolean' ? (
-                                <span
-                                  className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold font-mono ${
-                                    val
-                                      ? 'bg-amber-100 text-amber-950 border border-amber-300/80'
-                                      : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                  }`}
-                                >
-                                  {val ? 'TRUE' : 'FALSE'}
-                                </span>
-                              ) : (
-                                <span>{String(val)}</span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-
-                    {/* Row Delete Action */}
-                    <td className="py-1.5 px-2.5 text-center">
-                      <button
-                        onClick={() => handleDelete(row)}
-                        title="Excluir Registro"
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+              <>
+                {/* Top Virtual Spacer */}
+                {topSpacerHeight > 0 && (
+                  <tr style={{ height: `${topSpacerHeight}px` }} aria-hidden="true">
+                    <td colSpan={columns.length + 2} className="p-0 border-0 pointer-events-none" />
                   </tr>
-                );
-              })
+                )}
+
+                {/* Visible Rows in Viewport */}
+                {visibleRows.map((row, idx) => {
+                  const globalRowIdx = startIndex + idx;
+                  const isEditing = editingCell?.rowIdx === globalRowIdx;
+
+                  return (
+                    <tr
+                      key={globalRowIdx}
+                      style={{ height: `${ROW_HEIGHT}px` }}
+                      className="hover:bg-amber-50/30 transition-colors group"
+                    >
+                      <td className="py-1 px-2.5 text-center text-zinc-400 font-mono text-[10px]">
+                        {globalRowIdx + 1}
+                      </td>
+
+                      {columns.map(col => {
+                        const isCellEditing = isEditing && editingCell?.colName === col;
+                        const val = row[col];
+
+                        return (
+                          <td
+                            key={col}
+                            onDoubleClick={() => handleStartEdit(globalRowIdx, col, val)}
+                            className="py-1 px-2.5 text-zinc-800 font-normal relative"
+                          >
+                            {isCellEditing ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={editValue}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') handleSaveEdit(row);
+                                    if (e.key === 'Escape') setEditingCell(null);
+                                  }}
+                                  className="w-full px-2 py-0.5 bg-white border border-amber-400 rounded-lg text-xs focus:outline-none ring-2 ring-amber-400/20 font-mono text-zinc-900"
+                                />
+                                <button
+                                  onClick={() => handleSaveEdit(row)}
+                                  className="p-1 rounded bg-[#FACC15] text-zinc-950 hover:bg-[#EAB308] cursor-pointer"
+                                >
+                                  <Check className="w-3 h-3 stroke-[2.5]" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingCell(null)}
+                                  className="p-1 rounded bg-zinc-200 text-zinc-700 hover:bg-zinc-300 cursor-pointer"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div
+                                title="Dê um duplo clique para editar"
+                                className="cursor-pointer truncate max-w-[280px] font-mono text-[11px]"
+                              >
+                                {val === null || val === undefined ? (
+                                  <span className="text-zinc-300 italic">null</span>
+                                ) : typeof val === 'boolean' ? (
+                                  <span
+                                    className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold font-mono ${
+                                      val
+                                        ? 'bg-amber-100 text-amber-950 border border-amber-300/80'
+                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                    }`}
+                                  >
+                                    {val ? 'TRUE' : 'FALSE'}
+                                  </span>
+                                ) : (
+                                  <span>{String(val)}</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+
+                      {/* Row Delete Action */}
+                      <td className="py-1 px-2.5 text-center">
+                        <button
+                          onClick={() => handleDelete(row)}
+                          title="Excluir Registro"
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Bottom Virtual Spacer */}
+                {bottomSpacerHeight > 0 && (
+                  <tr style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true">
+                    <td colSpan={columns.length + 2} className="p-0 border-0 pointer-events-none" />
+                  </tr>
+                )}
+              </>
             )}
 
-            {/* Infinite Scroll Sentinel / Background Fetch Loader */}
+            {/* Fetching Next Batch Indicator */}
             {queryResult.hasMore && (
-              <tr ref={sentinelRef} className="bg-amber-50/40">
+              <tr className="bg-amber-50/40">
                 <td colSpan={columns.length + 2} className="py-3 text-center">
                   <div className="flex items-center justify-center gap-2 text-xs text-amber-950 font-medium">
                     <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -427,7 +465,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
         </table>
       </div>
 
-      {/* Footer Status Bar without Pagination Clutter */}
+      {/* Footer Status Bar */}
       <div className="flex items-center justify-between pt-2 px-1 flex-shrink-0 text-xs border-t border-zinc-200/80">
         <p className="text-[11px] text-zinc-500 font-medium">
           {totalRows.toLocaleString()} registros carregados
