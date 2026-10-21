@@ -1,37 +1,57 @@
 import { ConnectionConfig, ExportOptions, QueryResult, TableInfo, ColumnInfo, MutationResult } from '@shared/types/database';
+import { invoke } from '@tauri-apps/api/core';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 
-export const isDesktopElectron = typeof window !== 'undefined' && !!window.api;
+export const isDesktopElectron = typeof window !== 'undefined' && !!(window as any).api;
+export const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+export const isDesktop = isDesktopElectron || isTauri;
 
 export const safeApi = {
   connect: async (config: ConnectionConfig) => {
-    if (window.api) return window.api.connect(config);
+    if (isTauri) {
+      return invoke<any>('db_connect', { config });
+    }
+    if ((window as any).api) return (window as any).api.connect(config);
     return { success: true, connectionId: config.id, databaseName: config.name, serverVersion: 'Web Fallback' };
   },
 
   disconnect: async (connectionId: string) => {
-    if (window.api) return window.api.disconnect(connectionId);
+    if (isTauri) {
+      await invoke('db_disconnect', { connectionId });
+      return { success: true };
+    }
+    if ((window as any).api) return (window as any).api.disconnect(connectionId);
     return { success: true };
   },
 
   testConnection: async (config: ConnectionConfig) => {
-    if (window.api) return window.api.testConnection(config);
-    return { success: true, message: 'Conexão simulada no navegador (abra via Desktop Electron para modo nativo).' };
+    if (isTauri) {
+      return invoke<any>('db_test_connection', { config });
+    }
+    if ((window as any).api) return (window as any).api.testConnection(config);
+    return { success: true, message: 'Conexão simulada no navegador (abra via Desktop Electron ou Tauri para modo nativo).' };
   },
 
   getActiveConnections: async () => {
-    if (window.api) return window.api.getActiveConnections();
+    if ((window as any).api) return (window as any).api.getActiveConnections();
     return [];
   },
 
   listDatabases: async (config: ConnectionConfig): Promise<string[]> => {
-    if (window.api && typeof window.api.listDatabases === 'function') {
-      return window.api.listDatabases(config);
+    if (isTauri) {
+      return invoke<string[]>('db_list_databases', { config });
     }
-    throw new Error('A busca de bancos no servidor requer o aplicativo Desktop Electron para realizar a conexão de rede.');
+    if ((window as any).api && typeof (window as any).api.listDatabases === 'function') {
+      return (window as any).api.listDatabases(config);
+    }
+    throw new Error('A busca de bancos no servidor requer o aplicativo Desktop para realizar a conexão de rede.');
   },
 
   listTables: async (connectionId: string): Promise<TableInfo[]> => {
-    if (window.api) return window.api.listTables(connectionId);
+    if (isTauri) {
+      return invoke<TableInfo[]>('db_list_tables', { connectionId });
+    }
+    if ((window as any).api) return (window as any).api.listTables(connectionId);
     return [
       { name: 'actor', type: 'table', rowCount: 200, schema: 'public' },
       { name: 'address', type: 'table', rowCount: 603, schema: 'public' },
@@ -56,7 +76,10 @@ export const safeApi = {
   },
 
   describeTable: async (connectionId: string, tableName: string, schema?: string): Promise<ColumnInfo[]> => {
-    if (window.api) return (window.api as any).describeTable(connectionId, tableName, schema);
+    if (isTauri) {
+      return invoke<ColumnInfo[]>('db_describe_table', { connectionId, tableName, schema });
+    }
+    if ((window as any).api) return (window as any).api.describeTable(connectionId, tableName, schema);
     if (tableName.toLowerCase().includes('customer')) {
       return [
         { name: 'customer_id', type: 'INTEGER', isPrimaryKey: true, nullable: false },
@@ -89,7 +112,10 @@ export const safeApi = {
   },
 
   executeQuery: async (connectionId: string, query: string, options?: any): Promise<QueryResult> => {
-    if (window.api) return window.api.executeQuery(connectionId, query, options);
+    if (isTauri) {
+      return invoke<QueryResult>('db_execute_query', { connectionId, query });
+    }
+    if ((window as any).api) return (window as any).api.executeQuery(connectionId, query, options);
     return {
       columns: ['CODIGO', 'NOME', 'CIDADE', 'SALDO'],
       rows: [
@@ -108,7 +134,16 @@ export const safeApi = {
     schema?: string,
     options?: { limit?: number; offset?: number }
   ): Promise<QueryResult> => {
-    if (window.api) return (window.api as any).getTableData(connectionId, tableName, schema, options);
+    if (isTauri) {
+      return invoke<QueryResult>('db_get_table_data', {
+        connectionId,
+        tableName,
+        schema,
+        limit: options?.limit ?? 300,
+        offset: options?.offset ?? 0
+      });
+    }
+    if ((window as any).api) return (window as any).api.getTableData(connectionId, tableName, schema, options);
     const limit = options?.limit ?? 300;
     const offset = options?.offset ?? 0;
     const mockRows = [
@@ -133,7 +168,10 @@ export const safeApi = {
   },
 
   insertRow: async (connectionId: string, tableName: string, data: Record<string, any>): Promise<MutationResult> => {
-    if (window.api) return window.api.insertRow(connectionId, tableName, data);
+    if (isTauri) {
+      return invoke<MutationResult>('db_insert_row', { connectionId, tableName, schema: null, data });
+    }
+    if ((window as any).api) return (window as any).api.insertRow(connectionId, tableName, data);
     return { success: true, affectedRows: 1, insertedId: Date.now() };
   },
 
@@ -143,18 +181,32 @@ export const safeApi = {
     primaryKey: Record<string, any>,
     changes: Record<string, any>
   ): Promise<MutationResult> => {
-    if (window.api) return window.api.updateRow(connectionId, tableName, primaryKey, changes);
+    if (isTauri) {
+      return invoke<MutationResult>('db_update_row', { connectionId, tableName, schema: null, primaryKey, changes });
+    }
+    if ((window as any).api) return (window as any).api.updateRow(connectionId, tableName, primaryKey, changes);
     return { success: true, affectedRows: 1 };
   },
 
   deleteRow: async (connectionId: string, tableName: string, primaryKey: Record<string, any>): Promise<MutationResult> => {
-    if (window.api) return window.api.deleteRow(connectionId, tableName, primaryKey);
+    if (isTauri) {
+      return invoke<MutationResult>('db_delete_row', { connectionId, tableName, schema: null, primaryKey });
+    }
+    if ((window as any).api) return (window as any).api.deleteRow(connectionId, tableName, primaryKey);
     return { success: true, affectedRows: 1 };
   },
 
   openFileDialog: async (filters?: { name: string; extensions: string[] }[]): Promise<string | null> => {
-    if (window.api && typeof window.api.openFileDialog === 'function') {
-      return window.api.openFileDialog(filters);
+    if (isTauri) {
+      const selected = await openDialog({
+        multiple: false,
+        directory: false,
+        filters
+      });
+      return selected as string | null;
+    }
+    if ((window as any).api && typeof (window as any).api.openFileDialog === 'function') {
+      return (window as any).api.openFileDialog(filters);
     }
 
     // Web Fallback: Create input[type="file"] so it never errors
@@ -178,21 +230,38 @@ export const safeApi = {
   },
 
   openDirectoryDialog: async (): Promise<string | null> => {
-    if (window.api && typeof window.api.openDirectoryDialog === 'function') {
-      return window.api.openDirectoryDialog();
+    if (isTauri) {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false
+      });
+      return selected as string | null;
+    }
+    if ((window as any).api && typeof (window as any).api.openDirectoryDialog === 'function') {
+      return (window as any).api.openDirectoryDialog();
     }
     return prompt('Informe o caminho da pasta de banco de dados:');
   },
 
   saveFileDialog: async (defaultName: string, ext: string): Promise<string | null> => {
-    if (window.api && typeof window.api.saveFileDialog === 'function') {
-      return window.api.saveFileDialog(defaultName, ext);
+    if (isTauri) {
+      const selected = await saveDialog({
+        defaultPath: defaultName,
+        filters: [{ name: ext.toUpperCase(), extensions: [ext.replace(/^\./, '')] }]
+      });
+      return selected;
+    }
+    if ((window as any).api && typeof (window as any).api.saveFileDialog === 'function') {
+      return (window as any).api.saveFileDialog(defaultName, ext);
     }
     return defaultName;
   },
 
   exportData: async (connectionId: string, options: ExportOptions) => {
-    if (window.api) return window.api.exportData(connectionId, options);
+    if (isTauri) {
+      return invoke<any>('export_data', { options });
+    }
+    if ((window as any).api) return (window as any).api.exportData(connectionId, options);
 
     // Web Fallback: download direct CSV in browser
     if (options.rows && options.rows.length > 0) {

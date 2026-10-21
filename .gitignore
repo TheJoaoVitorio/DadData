@@ -41,3 +41,8 @@ Thumbs.db
 *.tmp
 *.sqlite-journal
 test-output/
+
+# Rust / Cargo
+src-tauri/target/
+target/
+
