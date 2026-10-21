@@ -19,7 +19,8 @@ import {
   Check,
   Table as LucideTable,
   Eye,
-  Database
+  Database,
+  Trash2
 } from 'lucide-react';
 import { TableInfo, ConnectionConfig, ColumnInfo } from '@shared/types/database';
 import { DatabaseIcon } from '../icons/DatabaseIcon';
@@ -38,6 +39,7 @@ interface SidebarProps {
   onSwitchConnection: (conn: ConnectionConfig) => void;
   onSwitchDatabase?: (dbName: string) => void;
   onDisconnect: () => void;
+  onDeleteConnection?: (connId: string) => void;
   onOpenNewQuery: () => void;
   onOpenNewConnection: () => void;
   onRefreshSchema: () => void;
@@ -76,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSwitchConnection,
   onSwitchDatabase,
   onDisconnect,
+  onDeleteConnection,
   onOpenNewQuery,
   onOpenNewConnection,
   onRefreshSchema,
@@ -393,31 +396,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   Conexões Salvas
                 </div>
 
-                {savedConnections.map(c => {
-                  const isActive = activeConnection?.id === c.id;
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => {
-                        setIsConnDropdownOpen(false);
-                        onSwitchConnection(c);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                        isActive
-                          ? 'bg-amber-100 text-amber-950 border border-amber-300 font-semibold'
-                          : 'text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <DatabaseIcon type={c.type} className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span className="truncate">{c.name}</span>
+                {savedConnections.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-zinc-400 italic text-center">
+                    Nenhuma conexão salva
+                  </div>
+                ) : (
+                  savedConnections.map(c => {
+                    const isActive = activeConnection?.id === c.id;
+                    return (
+                      <div
+                        key={c.id}
+                        className={`group w-full px-2 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                          isActive
+                            ? 'bg-amber-100/90 text-amber-950 border border-amber-300 font-semibold'
+                            : 'text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950'
+                        }`}
+                        onClick={() => {
+                          setIsConnDropdownOpen(false);
+                          onSwitchConnection(c);
+                        }}
+                      >
+                        <div className="flex items-center gap-2 truncate min-w-0">
+                          <DatabaseIcon type={c.type} className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="truncate">{c.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
+                          <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 font-mono">
+                            {c.type}
+                          </span>
+                          {onDeleteConnection && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`Deseja realmente excluir a conexão "${c.name}"?`)) {
+                                  onDeleteConnection(c.id);
+                                }
+                              }}
+                              title="Excluir conexão"
+                              className="p-1 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 font-mono">
-                        {c.type}
-                      </span>
-                    </button>
-                  );
-                })}
+                    );
+                  })
+                )}
 
                 <div className="pt-1.5 border-t border-zinc-100 mt-1">
                   <button

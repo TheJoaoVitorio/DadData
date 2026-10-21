@@ -3,6 +3,22 @@ use tauri::State;
 use crate::engine::EngineManager;
 use crate::engine::types::*;
 use crate::engine::export::*;
+use crate::storage::LocalStorage;
+
+#[tauri::command]
+pub async fn storage_get_connections() -> Result<Vec<ConnectionConfig>, String> {
+    LocalStorage::get_saved_connections()
+}
+
+#[tauri::command]
+pub async fn storage_save_connection(config: ConnectionConfig) -> Result<(), String> {
+    LocalStorage::save_connection(&config)
+}
+
+#[tauri::command]
+pub async fn storage_delete_connection(id: String) -> Result<(), String> {
+    LocalStorage::delete_connection(&id)
+}
 
 #[tauri::command]
 pub async fn db_connect(

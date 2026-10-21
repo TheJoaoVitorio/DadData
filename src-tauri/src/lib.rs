@@ -1,5 +1,6 @@
 pub mod engine;
 pub mod commands;
+pub mod storage;
 
 use std::sync::Arc;
 use engine::EngineManager;
@@ -25,6 +26,9 @@ pub fn run() {
             commands::db_update_row,
             commands::db_delete_row,
             commands::export_data,
+            commands::storage_get_connections,
+            commands::storage_save_connection,
+            commands::storage_delete_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

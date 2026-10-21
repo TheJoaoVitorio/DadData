@@ -30,7 +30,57 @@ export const safeApi = {
   },
 
   getActiveConnections: async () => {
-    return [];
+    return safeApi.getSavedConnections();
+  },
+
+  getSavedConnections: async (): Promise<ConnectionConfig[]> => {
+    if (isTauri) {
+      try {
+        const conns = await invoke<ConnectionConfig[]>('storage_get_connections');
+        if (Array.isArray(conns) && conns.length > 0) {
+          return conns;
+        }
+      } catch (err) {
+        console.error('Erro ao ler conexões do SQLite local:', err);
+      }
+    }
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('daddata_saved_connections') : null;
+    return saved ? JSON.parse(saved) : [];
+  },
+
+  saveConnection: async (config: ConnectionConfig): Promise<void> => {
+    if (isTauri) {
+      try {
+        await invoke('storage_save_connection', { config });
+      } catch (err) {
+        console.error('Erro ao salvar conexão no SQLite local:', err);
+      }
+    }
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('daddata_saved_connections');
+      const list: ConnectionConfig[] = saved ? JSON.parse(saved) : [];
+      const filtered = list.filter(c => c.id !== config.id);
+      filtered.unshift(config);
+      localStorage.setItem('daddata_saved_connections', JSON.stringify(filtered));
+    }
+  },
+
+  deleteConnection: async (id: string): Promise<void> => {
+    if (isTauri) {
+      try {
+        await invoke('storage_delete_connection', { id });
+      } catch (err) {
+        console.error('Erro ao excluir conexão do SQLite local:', err);
+      }
+    }
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('daddata_saved_connections');
+      if (saved) {
+        const list: ConnectionConfig[] = JSON.parse(saved);
+        const filtered = list.filter(c => c.id !== id);
+        localStorage.setItem('daddata_saved_connections', JSON.stringify(filtered));
+      }
+    }
   },
 
   listDatabases: async (config: ConnectionConfig): Promise<string[]> => {

@@ -110,13 +110,31 @@ export const App: React.FC = () => {
 
   const initApp = async () => {
     try {
+      const saved = await safeApi.getSavedConnections();
+      if (saved && saved.length > 0) {
+        setSavedConnections(saved);
+      }
       const active = await safeApi.getActiveConnections();
       if (active && active.length > 0) {
-        setSavedConnections(active);
         await handleConnect(active[0]);
+      } else if (saved && saved.length > 0) {
+        await handleConnect(saved[0]);
       }
     } catch (err: any) {
       console.warn('Initial connection notice:', err);
+    }
+  };
+
+  const handleDeleteConnection = async (id: string) => {
+    try {
+      if (activeConnection?.id === id) {
+        await handleDisconnect();
+      }
+      await safeApi.deleteConnection(id);
+      setSavedConnections(prev => prev.filter(c => c.id !== id));
+      showToast('Conexão excluída com sucesso.');
+    } catch (err: any) {
+      showToast(`Erro ao excluir conexão: ${err.message}`, 'error');
     }
   };
 
@@ -226,6 +244,7 @@ export const App: React.FC = () => {
           const exists = prev.some(c => c.id === config.id);
           return exists ? prev : [...prev, config];
         });
+        await safeApi.saveConnection(config).catch(e => console.warn('Could not save connection:', e));
 
         // For server-based engines, discover available databases
         if (['postgres', 'mysql', 'mssql', 'mongodb'].includes(config.type)) {
@@ -760,6 +779,7 @@ export const App: React.FC = () => {
           onSwitchConnection={handleConnect}
           onSwitchDatabase={handleSwitchDatabase}
           onDisconnect={handleDisconnect}
+          onDeleteConnection={handleDeleteConnection}
           onOpenNewQuery={handleOpenNewQuery}
           onOpenNewConnection={() => setIsConnectionDrawerOpen(true)}
           onRefreshSchema={handleRefreshSchema}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -92,12 +92,12 @@ const ENGINES: EngineOption[] = [
   // Legacy & ERP
   {
     type: 'firebird',
-    label: 'Firebird (.FDB)',
+    label: 'Firebird (.FDB, .GDB)',
     category: 'legacy',
     categoryLabel: 'ERP Desktop',
     defaultPort: 3050,
-    extensions: ['fdb'],
-    description: 'Dialeto 1 e 3 (CLIPP, G10, Compufour)',
+    extensions: ['fdb', 'gdb', 'ib'],
+    description: 'Embedded (v1.5 a 5.0 ODS) ou Servidor TCP/IP',
     badge: 'ERP Legado'
   },
   {
@@ -165,6 +165,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
   const [password, setPassword] = useState('');
   const [ssl, setSsl] = useState(false);
   const [charset, setCharset] = useState('WIN1252');
+  const [authType, setAuthType] = useState<'sql' | 'windows'>('sql');
 
   // Server Databases Discovery ("Buscar Databases")
   const [discoveredDatabases, setDiscoveredDatabases] = useState<string[]>([]);
@@ -176,6 +177,29 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
   const [isTesting, setIsTesting] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
+  // Always reset fields to fresh defaults when opening drawer
+  useEffect(() => {
+    if (isOpen) {
+      setStep(1);
+      setSelectedEngine(ENGINES[0]);
+      setActiveCategory('all');
+      setSearchQuery('');
+      setConnName('Conexão PostgreSQL');
+      setFilePath('');
+      setHost('localhost');
+      setPort(5432);
+      setDatabase('postgres');
+      setUser('postgres');
+      setPassword('');
+      setSsl(false);
+      setCharset('WIN1252');
+      setAuthType('sql');
+      setDiscoveredDatabases([]);
+      setDatabaseSearchError(null);
+      setTestResult(null);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const isFileBased = ['sqlite', 'dbf', 'paradox', 'access', 'hfsql', 'nexusdb'].includes(selectedEngine.type);
@@ -184,6 +208,8 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
   const handleSelectEngine = (eng: EngineOption) => {
     setSelectedEngine(eng);
     setConnName(`Conexão ${eng.label}`);
+    setFilePath('');
+    setAuthType('sql');
     if (eng.defaultPort) setPort(eng.defaultPort);
 
     // Sensible defaults
@@ -273,11 +299,25 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
         host: host || '127.0.0.1',
         port: port || 3050,
         database: database || filePath,
+        filePath: filePath || (database && (database.includes('\\') || database.includes('/') || database.toLowerCase().endsWith('.fdb') || database.toLowerCase().endsWith('.gdb')) ? database : undefined),
         user: user || 'SYSDBA',
         password: password || 'masterkey',
         options: {
           charset: charset || 'WIN1252'
         }
+      };
+    }
+
+    if (selectedEngine.type === 'mssql') {
+      return {
+        ...base,
+        host: host || 'localhost',
+        port: port || 1433,
+        database: database || 'master',
+        user: authType === 'windows' ? undefined : user,
+        password: authType === 'windows' ? undefined : password,
+        authType,
+        ssl
       };
     }
 
@@ -346,6 +386,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
     setIsConnecting(true);
     try {
       const config = buildConfig();
+      await safeApi.saveConnection(config).catch(err => console.warn('Could not auto-save connection:', err));
       await onConnect(config);
       onClose();
     } catch (err: any) {
@@ -603,7 +644,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                     <div className="space-y-3.5 p-4 rounded-2xl bg-zinc-50/70 border border-zinc-200">
                       <div>
                         <label className="block text-xs font-bold text-zinc-800 mb-1">
-                          Arquivo do Banco Firebird (.FDB)
+                          Arquivo do Banco Firebird (.FDB, .GDB)
                         </label>
                         <div className="flex gap-2">
                           <input
@@ -738,6 +779,48 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                   ) : (
                     /* Client/Server Databases */
                     <div className="space-y-3.5 p-4 rounded-2xl bg-zinc-50/70 border border-zinc-200">
+                      {/* SQL Server Auth Mode Selection */}
+                      {selectedEngine.type === 'mssql' && (
+                        <div className="space-y-2 pb-2.5 border-b border-zinc-200">
+                          <label className="block text-xs font-bold text-zinc-800">
+                            Modo de Autenticação do SQL Server
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setAuthType('sql')}
+                              className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                                authType === 'sql'
+                                  ? 'bg-amber-100 border-amber-300 text-amber-950 font-bold shadow-xs'
+                                  : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+                              }`}
+                            >
+                              <span>SQL Server Auth</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAuthType('windows')}
+                              className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                                authType === 'windows'
+                                  ? 'bg-amber-100 border-amber-300 text-amber-950 font-bold shadow-xs'
+                                  : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+                              }`}
+                            >
+                              <span>Windows Auth (Integrada)</span>
+                            </button>
+                          </div>
+                          {authType === 'windows' ? (
+                            <div className="text-[11px] text-amber-800 bg-amber-50/90 p-2 rounded-xl border border-amber-200 flex items-center gap-2">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                              <span>Autenticação Integrada: utiliza a conta e permissões do usuário logado no Windows.</span>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-zinc-500">
+                              Autenticação via login e senha cadastrados no SQL Server (ex: sa).
+                            </p>
+                          )}
+                        </div>
+                      )}
                       <div className="grid grid-cols-3 gap-2.5">
                         <div className="col-span-2">
                           <label className="block text-xs font-bold text-zinc-800 mb-1">Host / Servidor</label>
@@ -762,28 +845,30 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="block text-xs font-bold text-zinc-800 mb-1">Usuário</label>
-                          <input
-                            type="text"
-                            placeholder="postgres, root, sa..."
-                            value={user}
-                            onChange={e => setUser(e.target.value)}
-                            className="w-full px-3.5 py-2 bg-white border border-zinc-200 focus:border-amber-400 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
-                          />
+                      {!(selectedEngine.type === 'mssql' && authType === 'windows') && (
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-800 mb-1">Usuário</label>
+                            <input
+                              type="text"
+                              placeholder="postgres, root, sa..."
+                              value={user}
+                              onChange={e => setUser(e.target.value)}
+                              className="w-full px-3.5 py-2 bg-white border border-zinc-200 focus:border-amber-400 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-800 mb-1">Senha</label>
+                            <input
+                              type="password"
+                              placeholder="••••••••"
+                              value={password}
+                              onChange={e => setPassword(e.target.value)}
+                              className="w-full px-3.5 py-2 bg-white border border-zinc-200 focus:border-amber-400 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-zinc-800 mb-1">Senha</label>
-                          <input
-                            type="password"
-                            placeholder="••••••••"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            className="w-full px-3.5 py-2 bg-white border border-zinc-200 focus:border-amber-400 rounded-xl text-xs text-zinc-900 font-mono focus:outline-none"
-                          />
-                        </div>
-                      </div>
+                      )}
 
                       {/* Database Selection with "Buscar Databases" */}
                       <div className="pt-2 border-t border-zinc-200/80 space-y-2">
