@@ -55,7 +55,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       options?: { limit?: number; offset?: number }
     ) => {
       const config = driverManager.getActiveConnectionConfig(connectionId);
-      const limit = Math.max(1, options?.limit ?? 50);
+      const limit = Math.max(1, options?.limit ?? 300);
       const offset = Math.max(0, options?.offset ?? 0);
 
       let target = `"${tableName}"`;

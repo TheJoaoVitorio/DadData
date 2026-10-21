@@ -120,7 +120,9 @@ export const App: React.FC = () => {
     }
   };
 
-  // Helper to load table data and metadata into a specific tab (supports on-demand paging and appending)
+  const FETCH_CHUNK_SIZE = 300;
+
+  // Helper to load table data and metadata into a specific tab (supports continuous on-demand infinite scroll fetching)
   const loadTableDataForTab = async (
     tabId: string,
     tableName: string,
@@ -142,8 +144,7 @@ export const App: React.FC = () => {
     );
 
     try {
-      const currentTab = tabs.find(t => t.id === tabId);
-      const limit = options?.limit ?? currentTab?.batchSize ?? 50;
+      const limit = options?.limit ?? FETCH_CHUNK_SIZE;
       const offset = options?.offset ?? 0;
 
       const [meta, data] = await Promise.all([
@@ -160,7 +161,6 @@ export const App: React.FC = () => {
             return {
               ...t,
               isLoadingMore: false,
-              batchSize: limit,
               queryResult: {
                 ...t.queryResult,
                 rows: combinedRows,
@@ -176,7 +176,6 @@ export const App: React.FC = () => {
             ...t,
             columnsMeta: meta ?? t.columnsMeta,
             queryResult: data,
-            batchSize: limit,
             isLoading: false,
             isLoadingMore: false
           };
@@ -196,9 +195,10 @@ export const App: React.FC = () => {
 
   const handleLoadMore = async () => {
     const currentTab = tabs.find(t => t.id === activeTabId);
-    if (!currentTab || !currentTab.tableName || !activeConnection) return;
+    if (!currentTab || !currentTab.tableName || !activeConnection || currentTab.isLoadingMore) return;
+    if (currentTab.queryResult && !currentTab.queryResult.hasMore) return;
+
     const currentRowsCount = currentTab.queryResult?.rows?.length || 0;
-    const batchSize = currentTab.batchSize || 50;
 
     await loadTableDataForTab(
       currentTab.id,
@@ -206,54 +206,9 @@ export const App: React.FC = () => {
       activeConnection.id,
       currentTab.schema,
       {
-        limit: batchSize,
+        limit: FETCH_CHUNK_SIZE,
         offset: currentRowsCount,
         append: true
-      }
-    );
-  };
-
-  const handleLoadAll = async () => {
-    const currentTab = tabs.find(t => t.id === activeTabId);
-    if (!currentTab || !currentTab.tableName || !activeConnection) return;
-    const totalCount = currentTab.queryResult?.totalCount || 5000;
-
-    if (totalCount > 10000) {
-      if (!confirm(`A tabela possui ${totalCount.toLocaleString()} registros. Carregar todos de uma vez pode usar bastante memória. Deseja continuar?`)) {
-        return;
-      }
-    }
-
-    await loadTableDataForTab(
-      currentTab.id,
-      currentTab.tableName,
-      activeConnection.id,
-      currentTab.schema,
-      {
-        limit: totalCount,
-        offset: 0,
-        append: false
-      }
-    );
-  };
-
-  const handleChangeBatchSize = async (newBatchSize: number) => {
-    const currentTab = tabs.find(t => t.id === activeTabId);
-    if (!currentTab || !currentTab.tableName || !activeConnection) return;
-
-    setTabs(prev =>
-      prev.map(t => (t.id === currentTab.id ? { ...t, batchSize: newBatchSize } : t))
-    );
-
-    await loadTableDataForTab(
-      currentTab.id,
-      currentTab.tableName,
-      activeConnection.id,
-      currentTab.schema,
-      {
-        limit: newBatchSize,
-        offset: 0,
-        append: false
       }
     );
   };
@@ -916,11 +871,7 @@ export const App: React.FC = () => {
                 columnsMeta={currentTab?.columnsMeta || []}
                 isLoading={currentTab?.isLoading || false}
                 isLoadingMore={currentTab?.isLoadingMore || false}
-                batchSize={currentTab?.batchSize || 50}
                 onLoadMore={currentTab?.type !== 'query' ? handleLoadMore : undefined}
-                onLoadAll={currentTab?.type !== 'query' ? handleLoadAll : undefined}
-                onChangeBatchSize={currentTab?.type !== 'query' ? handleChangeBatchSize : undefined}
-                onRefreshData={handleRefreshSchema}
                 onUpdateRow={handleUpdateRow}
                 onDeleteRow={handleDeleteRow}
                 onOpenAddRow={() => setIsAddRowDrawerOpen(true)}

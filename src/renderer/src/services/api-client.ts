@@ -109,7 +109,7 @@ export const safeApi = {
     options?: { limit?: number; offset?: number }
   ): Promise<QueryResult> => {
     if (window.api) return (window.api as any).getTableData(connectionId, tableName, schema, options);
-    const limit = options?.limit ?? 50;
+    const limit = options?.limit ?? 300;
     const offset = options?.offset ?? 0;
     const mockRows = [
       { CODIGO: 101, NOME: 'Auto Peças Brasil Ltda', CIDADE: 'São Paulo', SALDO: 15420.50, ATIVO: true },
