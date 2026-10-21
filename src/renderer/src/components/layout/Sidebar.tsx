@@ -24,14 +24,19 @@ import {
 import { TableInfo, ConnectionConfig, ColumnInfo } from '@shared/types/database';
 import { DatabaseIcon } from '../icons/DatabaseIcon';
 import { safeApi } from '../../services/api-client';
+import { ShinyButton } from '../magicui/shiny-button';
+import { NumberTicker } from '../magicui/number-ticker';
 
 interface SidebarProps {
   activeConnection: ConnectionConfig | null;
   savedConnections: ConnectionConfig[];
+  serverDatabases?: string[];
+  activeDatabase?: string;
   tables: TableInfo[];
   selectedTable: string | null;
-  onSelectTable: (tableName: string) => void;
+  onSelectTable: (tableName: string, schema?: string) => void;
   onSwitchConnection: (conn: ConnectionConfig) => void;
+  onSwitchDatabase?: (dbName: string) => void;
   onDisconnect: () => void;
   onOpenNewQuery: () => void;
   onOpenNewConnection: () => void;
@@ -63,10 +68,13 @@ const ViewGridIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3
 export const Sidebar: React.FC<SidebarProps> = ({
   activeConnection,
   savedConnections,
+  serverDatabases = [],
+  activeDatabase = '',
   tables,
   selectedTable,
   onSelectTable,
   onSwitchConnection,
+  onSwitchDatabase,
   onDisconnect,
   onOpenNewQuery,
   onOpenNewConnection,
@@ -76,6 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [activeRail, setActiveRail] = useState<'explorer' | 'pinned' | 'history'>('explorer');
   const [filterText, setFilterText] = useState('');
   const [isConnDropdownOpen, setIsConnDropdownOpen] = useState(false);
+  const [isDatabaseDropdownOpen, setIsDatabaseDropdownOpen] = useState(false);
   const [pinnedEntities, setPinnedEntities] = useState<string[]>([]);
   const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set(['public', 'main', 'default']));
@@ -112,26 +121,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const toggleExpandEntity = async (name: string, e: React.MouseEvent) => {
+  const toggleExpandEntity = async (name: string, schema: string | undefined, e: React.MouseEvent) => {
     e.stopPropagation();
+    const key = schema && schema !== 'default' ? `${schema}.${name}` : name;
     const next = new Set(expandedEntities);
-    const isExpanding = !next.has(name);
+    const isExpanding = !next.has(key);
 
     if (isExpanding) {
-      next.add(name);
-      if (!columnsCache[name] && activeConnection) {
-        setLoadingColumns(prev => ({ ...prev, [name]: true }));
+      next.add(key);
+      if (!columnsCache[key] && activeConnection) {
+        setLoadingColumns(prev => ({ ...prev, [key]: true }));
         try {
-          const cols = await safeApi.describeTable(activeConnection.id, name);
-          setColumnsCache(prev => ({ ...prev, [name]: cols }));
+          const cols = await safeApi.describeTable(activeConnection.id, name, schema);
+          setColumnsCache(prev => ({ ...prev, [key]: cols }));
         } catch (err) {
           console.warn('Failed to load columns for table:', name, err);
         } finally {
-          setLoadingColumns(prev => ({ ...prev, [name]: false }));
+          setLoadingColumns(prev => ({ ...prev, [key]: false }));
         }
       }
     } else {
-      next.delete(name);
+      next.delete(key);
     }
     setExpandedEntities(next);
   };
@@ -156,23 +166,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const hasMultipleSchemas = schemasPresent.length > 1;
 
   const isView = (t: TableInfo) => t.type === 'view';
-  const pinnedList = tables.filter(t => pinnedEntities.includes(t.name));
+  const pinnedList = tables.filter(t => {
+    const key = t.schema && t.schema !== 'default' ? `${t.schema}.${t.name}` : t.name;
+    return pinnedEntities.includes(key) || pinnedEntities.includes(t.name);
+  });
 
-  const displayList = activeRail === 'pinned'
-    ? filteredTables.filter(t => pinnedEntities.includes(t.name))
-    : filteredTables;
+  const displayList = activeRail === 'pinned' ? pinnedList : filteredTables;
 
   const renderEntityItem = (entity: TableInfo, isPinnedItem = false) => {
-    const isSelected = selectedTable === entity.name;
-    const isExpanded = expandedEntities.has(entity.name);
-    const isItemPinned = pinnedEntities.includes(entity.name);
-    const columns = columnsCache[entity.name] || [];
-    const isLoadingCols = loadingColumns[entity.name];
+    const key = entity.schema && entity.schema !== 'default' ? `${entity.schema}.${entity.name}` : entity.name;
+    const isSelected = selectedTable === entity.name || selectedTable === key;
+    const isExpanded = expandedEntities.has(key);
+    const isItemPinned = pinnedEntities.includes(key) || pinnedEntities.includes(entity.name);
+    const columns = columnsCache[key] || columnsCache[entity.name] || [];
+    const isLoadingCols = loadingColumns[key];
 
     return (
-      <div key={`${isPinnedItem ? 'pin_' : 'ent_'}${entity.name}`} className="flex flex-col">
+      <div key={`${isPinnedItem ? 'pin_' : 'ent_'}${key}`} className="flex flex-col">
         <div
-          onClick={() => onSelectTable(entity.name)}
+          onClick={() => onSelectTable(entity.name, entity.schema)}
           className={`h-7 px-2 flex items-center justify-between text-xs cursor-pointer group rounded-lg transition-colors select-none ${
             isSelected
               ? 'bg-amber-100 text-amber-950 font-bold border border-amber-300/80 shadow-xs'
@@ -181,8 +193,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className="flex items-center gap-1.5 min-w-0">
             <button
-              onClick={e => toggleExpandEntity(entity.name, e)}
-              className="p-0.5 -ml-1 text-zinc-400 hover:text-zinc-800 transition-transform"
+              onClick={e => toggleExpandEntity(entity.name, entity.schema, e)}
+              className="p-0.5 -ml-1 text-zinc-400 hover:text-zinc-800 transition-transform cursor-pointer"
               title="Ver colunas"
             >
               <ChevronRight
@@ -204,17 +216,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {isPinnedItem ? (
               <button
-                onClick={e => togglePin(entity.name, e)}
+                onClick={e => togglePin(key, e)}
                 title="Desafixar tabela"
-                className="opacity-70 hover:opacity-100 p-0.5 text-amber-600 hover:text-rose-500"
+                className="opacity-70 hover:opacity-100 p-0.5 text-amber-600 hover:text-rose-500 cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>
             ) : (
               <button
-                onClick={e => togglePin(entity.name, e)}
+                onClick={e => togglePin(key, e)}
                 title={isItemPinned ? 'Desafixar' : 'Fixar no topo'}
-                className={`p-0.5 transition-opacity ${
+                className={`p-0.5 transition-opacity cursor-pointer ${
                   isItemPinned
                     ? 'text-amber-500 opacity-100'
                     : 'text-zinc-400 hover:text-amber-500 opacity-0 group-hover:opacity-100'
@@ -263,14 +275,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-80 bg-white text-zinc-700 rounded-3xl flex overflow-hidden shadow-sm border border-zinc-200/90 select-none z-10">
+    <aside className="w-80 bg-white text-zinc-700 flex overflow-hidden border-r border-zinc-200/90 select-none z-10 shrink-0">
       {/* 1. Leftmost Activity Rail (Clean Soft Neutral) */}
       <div className="w-11 bg-zinc-50/80 flex flex-col items-center py-3 border-r border-zinc-200/80 space-y-3 flex-shrink-0">
         {/* Explorer icon */}
         <button
           onClick={() => setActiveRail('explorer')}
           title="Tabelas e Entidades"
-          className={`p-2 rounded-xl transition-all relative ${
+          className={`p-2 rounded-xl transition-all relative cursor-pointer ${
             activeRail === 'explorer'
               ? 'text-zinc-950 bg-amber-400 shadow-xs'
               : 'text-zinc-400 hover:text-zinc-800 hover:bg-zinc-200/60'
@@ -286,7 +298,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => setActiveRail('pinned')}
           title="Tabelas Fixadas / Favoritos"
-          className={`p-2 rounded-xl transition-all relative ${
+          className={`p-2 rounded-xl transition-all relative cursor-pointer ${
             activeRail === 'pinned'
               ? 'text-zinc-950 bg-amber-400 shadow-xs'
               : 'text-zinc-400 hover:text-amber-600 hover:bg-zinc-200/60'
@@ -302,7 +314,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => onOpenNewQuery()}
           title="Novo Editor SQL (Ctrl+N)"
-          className="p-2 rounded-xl text-zinc-400 hover:text-zinc-800 hover:bg-zinc-200/60 transition-all"
+          className="p-2 rounded-xl text-zinc-400 hover:text-zinc-800 hover:bg-zinc-200/60 transition-all cursor-pointer"
         >
           <Clock className="w-4 h-4" />
         </button>
@@ -314,7 +326,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onDisconnect}
             title="Desconectar banco de dados"
-            className="p-2 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+            className="p-2 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
           >
             <Power className="w-4 h-4" />
           </button>
@@ -323,12 +335,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* 2. Main Sidebar Explorer Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white">
-        {/* Header with Connection Dropdown */}
+        {/* Sidebar Title */}
+        <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-amber-100/70 border border-amber-300/80 flex items-center justify-center text-amber-900 shadow-xs">
+              <Database className="w-3.5 h-3.5 text-amber-700" />
+            </div>
+            <div>
+              <span className="text-xs font-bold tracking-tight text-zinc-900 block leading-tight">Explorador</span>
+              <span className="text-[10px] text-zinc-400 block leading-tight font-medium">Bancos &amp; Tabelas</span>
+            </div>
+          </div>
+          {tables.length > 0 && (
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200/80">
+              <NumberTicker value={tables.length} /> tab
+            </span>
+          )}
+        </div>
+
+        {/* Header with Connection Dropdown & Database Selector */}
         <div className="p-3 border-b border-zinc-200/80 relative">
           <div className="flex items-center justify-between gap-1.5">
             <button
               onClick={() => setIsConnDropdownOpen(!isConnDropdownOpen)}
-              className="flex-1 min-w-0 text-left px-2.5 py-1.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 transition-colors flex items-center justify-between"
+              className="flex-1 min-w-0 text-left px-2.5 py-1.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 transition-colors flex items-center justify-between cursor-pointer"
             >
               <div className="flex items-center gap-2 min-w-0">
                 {activeConnection && (
@@ -348,7 +378,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={onRefreshSchema}
               disabled={isLoading || !activeConnection}
               title="Recarregar Esquema"
-              className="p-1.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-400 hover:text-zinc-900 transition-colors"
+              className="p-1.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-amber-600' : ''}`} />
             </button>
@@ -372,7 +402,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         setIsConnDropdownOpen(false);
                         onSwitchConnection(c);
                       }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
                         isActive
                           ? 'bg-amber-100 text-amber-950 border border-amber-300 font-semibold'
                           : 'text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950'
@@ -395,7 +425,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       setIsConnDropdownOpen(false);
                       onOpenNewConnection();
                     }}
-                    className="w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold text-amber-800 hover:bg-amber-50 flex items-center gap-2 transition-colors"
+                    className="w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold text-amber-800 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Nova Conexão...</span>
@@ -405,6 +435,68 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </>
           )}
 
+          {/* Server Databases Selector Dropdown */}
+          {serverDatabases.length > 0 && onSwitchDatabase && (
+            <div className="relative mt-2">
+              <button
+                onClick={() => setIsDatabaseDropdownOpen(!isDatabaseDropdownOpen)}
+                className="w-full px-2.5 py-1.5 rounded-xl bg-amber-50/80 hover:bg-amber-100/80 border border-amber-200 text-xs flex items-center justify-between text-amber-950 font-bold transition-colors cursor-pointer shadow-xs"
+              >
+                <div className="flex items-center gap-2 truncate min-w-0">
+                  <Database className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
+                  <span className="truncate text-[11px]">
+                    Banco: <span className="font-extrabold text-amber-900">{activeDatabase || activeConnection?.database || 'Selecione'}</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-950 font-mono">
+                    {serverDatabases.length}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-amber-700" />
+                </div>
+              </button>
+
+              {isDatabaseDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setIsDatabaseDropdownOpen(false)} />
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-zinc-200 rounded-2xl p-2 shadow-2xl z-40 max-h-56 overflow-y-auto space-y-1">
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase text-zinc-400 tracking-wider">
+                      Bancos Disponíveis no Servidor ({serverDatabases.length})
+                    </div>
+
+                    {serverDatabases.map(db => {
+                      const isCurrent = (activeDatabase || activeConnection?.database) === db;
+                      return (
+                        <button
+                          key={db}
+                          onClick={() => {
+                            setIsDatabaseDropdownOpen(false);
+                            onSwitchDatabase(db);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                            isCurrent
+                              ? 'bg-amber-100 text-amber-950 border border-amber-300 font-bold'
+                              : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <Database className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                            <span className="truncate font-mono text-xs">{db}</span>
+                          </div>
+                          {isCurrent && (
+                            <span className="text-[10px] text-amber-800 font-bold bg-amber-200/80 px-1.5 py-0.2 rounded">
+                              Ativo
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Filter Bar */}
           <div className="relative mt-2">
             <input
@@ -412,12 +504,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               placeholder="Filtrar tabelas e views..."
               value={filterText}
               onChange={e => setFilterText(e.target.value)}
-              className="w-full bg-zinc-50 focus:bg-white text-zinc-900 placeholder-zinc-400 text-xs px-2.5 py-1.5 pr-7 rounded-xl border border-zinc-200 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-all"
+              className="w-full bg-zinc-50 focus:bg-white text-zinc-900 placeholder-zinc-400 text-xs px-2.5 py-1.5 pr-7 rounded-xl border border-zinc-200 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-all font-mono"
             />
             {filterText ? (
               <button
                 onClick={() => setFilterText('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-800"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-800 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -479,20 +571,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {activeRail === 'pinned'
                       ? 'Nenhuma tabela fixada. No Explorador, clique na estrela ao lado de uma tabela para fixar aqui.'
                       : tables.length === 0
-                      ? 'Nenhuma tabela ou conexão ativa.'
+                      ? (activeConnection ? 'Nenhuma tabela encontrada neste banco de dados.' : 'Nenhuma conexão ativa.')
                       : 'Nenhuma entidade encontrada com o filtro atual.'}
                   </div>
                 ) : hasMultipleSchemas ? (
                   schemasPresent.map(schema => {
                     const schemaEntities = displayList.filter(t => (t.schema || 'default') === schema);
                     if (schemaEntities.length === 0) return null;
-                    const isExpandedSchema = expandedSchemas.has(schema);
+                    const isExpandedSchema = expandedSchemas.has(schema) || filterText.length > 0;
 
                     return (
                       <div key={schema} className="mb-2">
                         <div
                           onClick={e => toggleExpandSchema(schema, e)}
-                          className="h-6 px-2 flex items-center justify-between text-xs text-zinc-500 hover:text-zinc-900 cursor-pointer select-none rounded hover:bg-zinc-100"
+                          className="h-6 px-2 flex items-center justify-between text-xs text-zinc-600 hover:text-zinc-950 cursor-pointer select-none rounded hover:bg-zinc-100 font-medium"
                         >
                           <div className="flex items-center gap-1.5 truncate">
                             <ChevronRight
@@ -503,7 +595,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             ) : (
                               <Folder className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                             )}
-                            <span className="font-semibold truncate text-[11px]">{schema}</span>
+                            <span className="font-bold truncate text-[11px] font-mono">{schema}</span>
                           </div>
                           <span className="text-[10px] text-zinc-400 font-mono">{schemaEntities.length}</span>
                         </div>
@@ -524,11 +616,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Quick Footer Action: New SQL Query Editor */}
+        {/* Quick Footer Action: New SQL Query Editor with Magic UI ShinyButton */}
         <div className="p-2.5 border-t border-zinc-200/80">
-          <button
+          <ShinyButton
+            type="button"
             onClick={onOpenNewQuery}
-            className="w-full py-1.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between transition-colors shadow-xs"
+            className="w-full py-1.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-950 text-xs font-semibold flex items-center justify-between shadow-xs transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-2">
               <span className="text-amber-600 font-mono font-bold">&lt;&gt;</span>
@@ -537,7 +630,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-200/80 text-amber-950 font-mono font-bold">
               Ctrl+N
             </span>
-          </button>
+          </ShinyButton>
         </div>
       </div>
     </aside>

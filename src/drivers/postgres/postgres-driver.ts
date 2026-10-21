@@ -1,3 +1,4 @@
+import pg from 'pg';
 import { DatabaseDriver } from '../driver-interface';
 import {
   ConnectionConfig,
@@ -9,124 +10,370 @@ import {
   QueryOptions
 } from '../../shared/types/database';
 
+const getPgClient = (clientConfig: any): pg.Client => {
+  const ClientClass = (pg as any).Client || (pg as any).default?.Client || pg;
+  return new ClientClass(clientConfig);
+};
+
 export class PostgresDriver implements DatabaseDriver {
   readonly type = 'postgres';
   private config: ConnectionConfig | null = null;
+  private client: pg.Client | null = null;
   private isConnected = false;
-  private mockTables: Map<
-    string,
-    { schema: string; type: 'table' | 'view'; columns: ColumnInfo[]; rows: Record<string, any>[] }
-  > = new Map();
 
   async connect(config: ConnectionConfig): Promise<ConnectionResult> {
     this.config = config;
+    if (this.client) {
+      await this.client.end().catch(() => {});
+      this.client = null;
+      this.isConnected = false;
+    }
+
+    const host = config.host || 'localhost';
+    const port = config.port || 5432;
+    const user = config.user || 'postgres';
+    const password = config.password || '';
+    const ssl = config.ssl ? { rejectUnauthorized: false } : false;
+
+    let dbName = config.database?.trim();
+    let client: pg.Client;
+
+    if (dbName) {
+      client = getPgClient({
+        host,
+        port,
+        user,
+        password,
+        database: dbName,
+        connectionTimeoutMillis: 8000,
+        ssl
+      });
+      await client.connect();
+    } else {
+      // Connect to server default database to allow querying pg_database
+      try {
+        client = getPgClient({
+          host,
+          port,
+          user,
+          password,
+          database: 'postgres',
+          connectionTimeoutMillis: 8000,
+          ssl
+        });
+        await client.connect();
+        dbName = 'postgres';
+      } catch (err: any) {
+        try {
+          client = getPgClient({
+            host,
+            port,
+            user,
+            password,
+            database: 'template1',
+            connectionTimeoutMillis: 8000,
+            ssl
+          });
+          await client.connect();
+          dbName = 'template1';
+        } catch {
+          throw new Error(`Falha ao conectar no servidor PostgreSQL (${host}:${port}): ${err.message}`);
+        }
+      }
+    }
+
+    this.client = client;
     this.isConnected = true;
-    this.initMockSchema();
+
+    const res = await client.query('SELECT version(), current_database();');
+    const version = res.rows[0]?.version || 'PostgreSQL';
+    const currentDb = res.rows[0]?.current_database || dbName;
 
     return {
       success: true,
       connectionId: config.id,
-      databaseName: config.database || 'postgres',
-      serverVersion: config.version || 'PostgreSQL 16.2 (Debian 16.2-1.pgdg120+2)'
+      databaseName: currentDb,
+      serverVersion: version.split(' on ')[0]
     };
   }
 
   async disconnect(): Promise<void> {
+    if (this.client) {
+      await this.client.end().catch(() => {});
+      this.client = null;
+    }
     this.isConnected = false;
-    this.mockTables.clear();
     this.config = null;
   }
 
   async testConnection(config: ConnectionConfig): Promise<{ success: boolean; message?: string }> {
     if (!config.host) {
-      return { success: false, message: 'Host is required for PostgreSQL connection' };
+      return { success: false, message: 'Host é obrigatório para conexão PostgreSQL' };
     }
-    return { success: true, message: `Successfully connected to PostgreSQL at ${config.host}:${config.port || 5432}` };
+
+    const dbName = config.database?.trim() || 'postgres';
+    const client = getPgClient({
+      host: config.host,
+      port: config.port || 5432,
+      user: config.user || 'postgres',
+      password: config.password || '',
+      database: dbName,
+      connectionTimeoutMillis: 5000,
+      ssl: config.ssl ? { rejectUnauthorized: false } : false
+    });
+
+    try {
+      await client.connect();
+      const res = await client.query('SELECT version(), current_database();');
+      const version = res.rows[0]?.version || 'PostgreSQL';
+      const actualDb = res.rows[0]?.current_database || dbName;
+      await client.end().catch(() => {});
+      return {
+        success: true,
+        message: `Conectado com sucesso ao banco "${actualDb}": ${version.split(' on ')[0]}`
+      };
+    } catch (err: any) {
+      return { success: false, message: `Falha ao conectar no PostgreSQL: ${err.message}` };
+    }
+  }
+
+  async listDatabases(config?: ConnectionConfig): Promise<string[]> {
+    const targetConfig = config || this.config;
+    if (!targetConfig || !targetConfig.host) {
+      throw new Error('Host do servidor PostgreSQL é obrigatório para listar databases.');
+    }
+
+    // If client is already connected to this server, use it
+    if (this.client && this.isConnected && (!config || (config.host === this.config?.host && config.port === this.config?.port))) {
+      const res = await this.client.query(`
+        SELECT datname 
+        FROM pg_database 
+        WHERE datistemplate = false 
+        ORDER BY datname ASC;
+      `);
+      return res.rows.map((r: any) => String(r.datname));
+    }
+
+    const tryConnect = async (dbName: string) => {
+      const client = getPgClient({
+        host: targetConfig.host,
+        port: targetConfig.port || 5432,
+        user: targetConfig.user || 'postgres',
+        password: targetConfig.password || '',
+        database: dbName,
+        connectionTimeoutMillis: 5000,
+        ssl: targetConfig.ssl ? { rejectUnauthorized: false } : false
+      });
+      await client.connect();
+      try {
+        const res = await client.query(`
+          SELECT datname 
+          FROM pg_database 
+          WHERE datistemplate = false 
+          ORDER BY datname ASC;
+        `);
+        return res.rows.map((r: any) => String(r.datname));
+      } finally {
+        await client.end().catch(() => {});
+      }
+    };
+
+    try {
+      return await tryConnect(targetConfig.database?.trim() || 'postgres');
+    } catch (err: any) {
+      try {
+        return await tryConnect('template1');
+      } catch {
+        throw new Error(`Falha ao buscar databases no PostgreSQL (${targetConfig.host}:${targetConfig.port || 5432}): ${err.message}`);
+      }
+    }
   }
 
   async listTables(): Promise<TableInfo[]> {
-    if (!this.isConnected) throw new Error('PostgreSQL driver not connected');
-
-    const tables: TableInfo[] = [];
-    for (const [name, data] of this.mockTables.entries()) {
-      tables.push({
-        name,
-        schema: data.schema,
-        type: data.type,
-        rowCount: data.rows.length
-      });
+    if (!this.isConnected || !this.client) {
+      throw new Error('PostgreSQL driver not connected');
     }
-    return tables;
+
+    try {
+      // High performance introspection of regular tables, partitioned tables, views, and materialized views
+      const res = await this.client.query(`
+        SELECT 
+          n.nspname AS schema,
+          c.relname AS name,
+          CASE 
+            WHEN c.relkind IN ('v', 'm') THEN 'view'
+            ELSE 'table'
+          END AS type,
+          CASE 
+            WHEN c.relkind IN ('v', 'm') THEN NULL
+            WHEN c.reltuples < 0 THEN 0
+            ELSE c.reltuples::bigint
+          END AS row_count
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+          AND n.nspname NOT LIKE 'pg_temp_%'
+          AND n.nspname NOT LIKE 'pg_toast_temp_%'
+          AND c.relkind IN ('r', 'p', 'v', 'm')
+        ORDER BY n.nspname ASC, c.relname ASC;
+      `);
+
+      return res.rows.map((r: any) => ({
+        name: String(r.name),
+        schema: String(r.schema),
+        type: r.type === 'view' ? 'view' : 'table',
+        rowCount: r.row_count != null ? Number(r.row_count) : undefined
+      }));
+    } catch {
+      // Fallback query via standard information_schema
+      const res = await this.client.query(`
+        SELECT 
+          table_schema AS schema,
+          table_name AS name,
+          CASE WHEN table_type = 'VIEW' THEN 'view' ELSE 'table' END AS type
+        FROM information_schema.tables
+        WHERE table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+        ORDER BY table_schema ASC, table_name ASC;
+      `);
+
+      return res.rows.map((r: any) => ({
+        name: String(r.name),
+        schema: String(r.schema),
+        type: r.type === 'view' ? 'view' : 'table'
+      }));
+    }
   }
 
   async describeTable(tableName: string): Promise<ColumnInfo[]> {
-    const cleanName = tableName.includes('.') ? tableName.split('.').pop()! : tableName;
-    const table = this.mockTables.get(cleanName);
-    if (!table) throw new Error(`Entity ${tableName} does not exist`);
-    return table.columns;
-  }
-
-  async executeQuery(query: string, _options?: QueryOptions): Promise<QueryResult> {
-    const startTime = performance.now();
-    const clean = query.trim();
-
-    const match = clean.match(/FROM\s+["`]?([a-zA-Z0-9_.-]+)["`]?/i);
-    let tableName = '';
-
-    if (match) {
-      tableName = match[1].replace('public.', '');
-    } else {
-      const keys = Array.from(this.mockTables.keys());
-      if (keys.length > 0) tableName = keys[0];
+    if (!this.isConnected || !this.client) {
+      throw new Error('PostgreSQL driver not connected');
     }
 
-    const table = this.mockTables.get(tableName);
-    if (!table) {
-      // Return empty result or generic table
-      return {
-        columns: ['status', 'query'],
-        rows: [{ status: 'executed', query: clean }],
-        rowCount: 1,
-        executionTimeMs: Math.round(performance.now() - startTime),
-        statementType: 'OTHER'
-      };
+    let schema: string | null = null;
+    let table = tableName;
+    if (tableName.includes('.')) {
+      const parts = tableName.split('.');
+      schema = parts[0];
+      table = parts[1];
     }
 
-    let rows = [...table.rows];
+    const res = await this.client.query(
+      `
+      SELECT 
+        c.column_name AS name,
+        c.udt_name AS type,
+        c.data_type AS full_type,
+        c.is_nullable = 'YES' AS nullable,
+        c.column_default AS default_value,
+        CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS is_primary_key
+      FROM information_schema.columns c
+      LEFT JOIN (
+        SELECT kcu.table_schema, kcu.table_name, kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        WHERE tc.constraint_type = 'PRIMARY KEY'
+      ) pk
+        ON c.table_schema = pk.table_schema
+        AND c.table_name = pk.table_name
+        AND c.column_name = pk.column_name
+      WHERE c.table_name = $1
+        AND ($2::text IS NULL OR c.table_schema = $2)
+      ORDER BY c.ordinal_position ASC;
+      `,
+      [table, schema]
+    );
 
-    const whereMatch = clean.match(/WHERE\s+(.+)$/i);
-    if (whereMatch) {
-      const condition = whereMatch[1].trim();
-      const eqMatch = condition.match(/([a-zA-Z0-9_-]+)\s*=\s*['"]?([^'"]+)['"]?/);
-      if (eqMatch) {
-        const col = eqMatch[1].toLowerCase();
-        const val = eqMatch[2].toLowerCase();
-        rows = rows.filter(r => {
-          const key = Object.keys(r).find(k => k.toLowerCase() === col);
-          return key ? String(r[key]).toLowerCase() === val : false;
-        });
+    if (res.rows.length === 0) {
+      // Fallback for views or custom catalogs: sample 0 rows to read column definitions
+      const qualified = schema ? `"${schema}"."${table}"` : `"${table}"`;
+      try {
+        const sample = await this.client.query(`SELECT * FROM ${qualified} LIMIT 0;`);
+        return sample.fields.map(f => ({
+          name: f.name,
+          type: String(f.dataTypeID || 'text'),
+          isPrimaryKey: false,
+          nullable: true
+        }));
+      } catch {
+        return [];
       }
     }
 
+    return res.rows.map((r: any) => ({
+      name: String(r.name),
+      type: String(r.type || r.full_type),
+      isPrimaryKey: Boolean(r.is_primary_key),
+      nullable: Boolean(r.nullable),
+      defaultValue: r.default_value != null ? String(r.default_value) : undefined
+    }));
+  }
+
+  async executeQuery(query: string, _options?: QueryOptions): Promise<QueryResult> {
+    if (!this.isConnected || !this.client) {
+      throw new Error('PostgreSQL driver not connected');
+    }
+
+    const startTime = performance.now();
+    const res = await this.client.query(query);
     const executionTimeMs = Math.round(performance.now() - startTime);
 
+    const result = Array.isArray(res) ? res[res.length - 1] : res;
+    const columns = result.fields
+      ? result.fields.map((f: any) => f.name)
+      : (result.rows && result.rows[0] ? Object.keys(result.rows[0]) : []);
+
+    const sanitizeVal = (val: any): any => {
+      if (val === null || val === undefined) return null;
+      if (typeof val === 'bigint') return Number(val);
+      if (Buffer.isBuffer(val)) return `\\x${val.toString('hex')}`;
+      if (val instanceof Date) return val.toISOString();
+      return val;
+    };
+
+    const rows = (result.rows || []).map((row: any) => {
+      const sanitized: Record<string, any> = {};
+      for (const k of Object.keys(row)) {
+        sanitized[k] = sanitizeVal(row[k]);
+      }
+      return sanitized;
+    });
+
     return {
-      columns: table.columns.map(c => c.name),
+      columns,
       rows,
-      rowCount: rows.length,
+      rowCount: result.rowCount ?? rows.length,
       executionTimeMs,
-      statementType: 'SELECT'
+      statementType: (result.command as any) || 'SELECT'
     };
   }
 
+  private formatTable(tableName: string): string {
+    if (tableName.includes('.')) {
+      return tableName.split('.').map(p => `"${p.replace(/"/g, '""')}"`).join('.');
+    }
+    return `"${tableName.replace(/"/g, '""')}"`;
+  }
+
   async insertRow(tableName: string, data: Record<string, any>): Promise<MutationResult> {
-    const table = this.mockTables.get(tableName);
-    if (!table) throw new Error(`Table ${tableName} not found`);
+    if (!this.isConnected || !this.client) throw new Error('PostgreSQL driver not connected');
 
-    const newId = table.rows.length + 1;
-    table.rows.push({ id: newId, ...data });
+    const keys = Object.keys(data);
+    if (keys.length === 0) throw new Error('No column data provided for insert');
 
-    return { success: true, affectedRows: 1, insertedId: newId };
+    const colNames = keys.map(k => `"${k.replace(/"/g, '""')}"`).join(', ');
+    const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+    const values = keys.map(k => data[k]);
+
+    const sql = `INSERT INTO ${this.formatTable(tableName)} (${colNames}) VALUES (${placeholders}) RETURNING *;`;
+    const res = await this.client.query(sql, values);
+
+    return {
+      success: true,
+      affectedRows: res.rowCount || 1,
+      insertedId: res.rows[0]?.id || res.rows[0]?.codigo || undefined
+    };
   }
 
   async updateRow(
@@ -134,126 +381,59 @@ export class PostgresDriver implements DatabaseDriver {
     primaryKey: Record<string, any>,
     changes: Record<string, any>
   ): Promise<MutationResult> {
-    const table = this.mockTables.get(tableName);
-    if (!table) throw new Error(`Table ${tableName} not found`);
+    if (!this.isConnected || !this.client) throw new Error('PostgreSQL driver not connected');
 
-    const pkKey = Object.keys(primaryKey)[0];
-    const pkVal = primaryKey[pkKey];
+    const changeKeys = Object.keys(changes);
+    if (changeKeys.length === 0) throw new Error('No changes provided for update');
 
-    const row = table.rows.find(r => String(r[pkKey]) === String(pkVal));
-    if (row) {
-      Object.assign(row, changes);
-      return { success: true, affectedRows: 1 };
+    const pkKeys = Object.keys(primaryKey);
+    if (pkKeys.length === 0) throw new Error('No primary key provided for update');
+
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    for (const k of changeKeys) {
+      setClauses.push(`"${k.replace(/"/g, '""')}" = $${idx++}`);
+      values.push(changes[k]);
     }
-    return { success: false, affectedRows: 0, error: 'Record not found' };
+
+    const whereClauses: string[] = [];
+    for (const k of pkKeys) {
+      whereClauses.push(`"${k.replace(/"/g, '""')}" = $${idx++}`);
+      values.push(primaryKey[k]);
+    }
+
+    const sql = `UPDATE ${this.formatTable(tableName)} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')} RETURNING *;`;
+    const res = await this.client.query(sql, values);
+
+    return {
+      success: true,
+      affectedRows: res.rowCount || 0
+    };
   }
 
   async deleteRow(tableName: string, primaryKey: Record<string, any>): Promise<MutationResult> {
-    const table = this.mockTables.get(tableName);
-    if (!table) throw new Error(`Table ${tableName} not found`);
+    if (!this.isConnected || !this.client) throw new Error('PostgreSQL driver not connected');
 
-    const pkKey = Object.keys(primaryKey)[0];
-    const pkVal = primaryKey[pkKey];
+    const pkKeys = Object.keys(primaryKey);
+    if (pkKeys.length === 0) throw new Error('No primary key provided for delete');
 
-    const idx = table.rows.findIndex(r => String(r[pkKey]) === String(pkVal));
-    if (idx >= 0) {
-      table.rows.splice(idx, 1);
-      return { success: true, affectedRows: 1 };
+    const whereClauses: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    for (const k of pkKeys) {
+      whereClauses.push(`"${k.replace(/"/g, '""')}" = $${idx++}`);
+      values.push(primaryKey[k]);
     }
-    return { success: false, affectedRows: 0, error: 'Record not found' };
-  }
 
-  private initMockSchema(): void {
-    this.mockTables.clear();
+    const sql = `DELETE FROM ${this.formatTable(tableName)} WHERE ${whereClauses.join(' AND ')};`;
+    const res = await this.client.query(sql, values);
 
-    const usersColumns: ColumnInfo[] = [
-      { name: 'id', type: 'uuid', isPrimaryKey: true, nullable: false },
-      { name: 'email', type: 'varchar(255)', isPrimaryKey: false, nullable: false },
-      { name: 'full_name', type: 'text', isPrimaryKey: false, nullable: false },
-      { name: 'role', type: 'varchar(50)', isPrimaryKey: false, nullable: false },
-      { name: 'created_at', type: 'timestamptz', isPrimaryKey: false, nullable: false }
-    ];
-
-    const usersRows = [
-      { id: '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed', email: 'alexandre@empresa.com.br', full_name: 'Alexandre Silveira', role: 'admin', created_at: '2024-01-10 14:32:00' },
-      { id: '2c8e7dae-ccfe-4c3e-8c6e-bc9eacca5cfe', email: 'beatriz.lima@empresa.com.br', full_name: 'Beatriz Lima', role: 'engineer', created_at: '2024-02-15 09:12:00' },
-      { id: '3d9f8ebf-dd0f-4d4f-9d7f-cd0fbdde6dgf', email: 'carlos.mendes@empresa.com.br', full_name: 'Carlos Mendes', role: 'analyst', created_at: '2024-03-01 11:45:00' }
-    ];
-
-    const auditColumns: ColumnInfo[] = [
-      { name: 'log_id', type: 'bigserial', isPrimaryKey: true, nullable: false },
-      { name: 'user_id', type: 'uuid', isPrimaryKey: false, nullable: false },
-      { name: 'action', type: 'varchar(100)', isPrimaryKey: false, nullable: false },
-      { name: 'ip_address', type: 'inet', isPrimaryKey: false, nullable: true },
-      { name: 'timestamp', type: 'timestamptz', isPrimaryKey: false, nullable: false }
-    ];
-
-    const auditRows = [
-      { log_id: 101, user_id: '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed', action: 'DATABASE_BACKUP_INIT', ip_address: '192.168.1.50', timestamp: '2024-04-01 02:00:00' },
-      { log_id: 102, user_id: '2c8e7dae-ccfe-4c3e-8c6e-bc9eacca5cfe', action: 'SCHEMA_MIGRATION_V2', ip_address: '192.168.1.75', timestamp: '2024-04-02 18:25:30' }
-    ];
-
-    this.mockTables.set('users', {
-      schema: 'public',
-      type: 'table',
-      columns: usersColumns,
-      rows: usersRows
-    });
-
-    this.mockTables.set('audit_logs', {
-      schema: 'public',
-      type: 'table',
-      columns: auditColumns,
-      rows: auditRows
-    });
-
-    // View in public schema
-    const activeUsersColumns: ColumnInfo[] = [
-      { name: 'id', type: 'uuid', isPrimaryKey: true, nullable: false },
-      { name: 'email', type: 'varchar(255)', isPrimaryKey: false, nullable: false },
-      { name: 'full_name', type: 'text', isPrimaryKey: false, nullable: false },
-      { name: 'role', type: 'varchar(50)', isPrimaryKey: false, nullable: false }
-    ];
-    this.mockTables.set('active_users_view', {
-      schema: 'public',
-      type: 'view',
-      columns: activeUsersColumns,
-      rows: usersRows.map(({ created_at, ...rest }) => rest)
-    });
-
-    // Analytics schema
-    const revenueColumns: ColumnInfo[] = [
-      { name: 'month_year', type: 'varchar(7)', isPrimaryKey: true, nullable: false },
-      { name: 'total_revenue', type: 'numeric(14,2)', isPrimaryKey: false, nullable: false },
-      { name: 'active_subscribers', type: 'integer', isPrimaryKey: false, nullable: false }
-    ];
-    const revenueRows = [
-      { month_year: '2024-01', total_revenue: 125430.00, active_subscribers: 1240 },
-      { month_year: '2024-02', total_revenue: 142100.50, active_subscribers: 1390 },
-      { month_year: '2024-03', total_revenue: 168900.00, active_subscribers: 1580 }
-    ];
-    this.mockTables.set('monthly_revenue', {
-      schema: 'analytics',
-      type: 'table',
-      columns: revenueColumns,
-      rows: revenueRows
-    });
-
-    // Analytics view
-    const customerSummaryColumns: ColumnInfo[] = [
-      { name: 'category', type: 'varchar(50)', isPrimaryKey: true, nullable: false },
-      { name: 'total_customers', type: 'integer', isPrimaryKey: false, nullable: false },
-      { name: 'avg_ltv', type: 'numeric(10,2)', isPrimaryKey: false, nullable: false }
-    ];
-    const customerSummaryRows = [
-      { category: 'Enterprise', total_customers: 42, avg_ltv: 24500.00 },
-      { category: 'Pro SMB', total_customers: 218, avg_ltv: 4200.00 }
-    ];
-    this.mockTables.set('customer_summary_view', {
-      schema: 'analytics',
-      type: 'view',
-      columns: customerSummaryColumns,
-      rows: customerSummaryRows
-    });
+    return {
+      success: true,
+      affectedRows: res.rowCount || 0
+    };
   }
 }

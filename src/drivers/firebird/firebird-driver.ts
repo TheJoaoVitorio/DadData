@@ -49,6 +49,7 @@ export class FirebirdDriver implements DatabaseDriver {
     }
 
     const dbPath = this.getWindowsShortPath(rawPath);
+    const charset = (config.options?.charset || config.options?.encoding || 'WIN1252').toUpperCase();
 
     const options: any = {
       host: config.host || '127.0.0.1',
@@ -58,7 +59,8 @@ export class FirebirdDriver implements DatabaseDriver {
       password: config.password || 'masterkey',
       lowercase_keys: false,
       role: config.options?.role || undefined,
-      pageSize: 4096
+      pageSize: 4096,
+      encoding: charset
     };
 
     return new Promise((resolve, reject) => {
@@ -73,7 +75,7 @@ export class FirebirdDriver implements DatabaseDriver {
           success: true,
           connectionId: config.id,
           databaseName: dbName,
-          serverVersion: `Firebird Server (${options.host}:${options.port})`
+          serverVersion: `Firebird Server (${options.host}:${options.port}) [${charset}]`
         });
       });
     });
@@ -99,6 +101,7 @@ export class FirebirdDriver implements DatabaseDriver {
     }
 
     const dbPath = this.getWindowsShortPath(rawPath);
+    const charset = (config.options?.charset || config.options?.encoding || 'WIN1252').toUpperCase();
 
     const options: any = {
       host: config.host || '127.0.0.1',
@@ -106,7 +109,8 @@ export class FirebirdDriver implements DatabaseDriver {
       database: dbPath,
       user: config.user || 'SYSDBA',
       password: config.password || 'masterkey',
-      lowercase_keys: false
+      lowercase_keys: false,
+      encoding: charset
     };
 
     return new Promise((resolve) => {
@@ -250,20 +254,36 @@ export class FirebirdDriver implements DatabaseDriver {
     }));
   }
 
+  private decodeBuffer(buf: Buffer, encoding: string): string {
+    const enc = (encoding || 'WIN1252').toUpperCase();
+    if (['WIN1252', 'ISO8859_1', 'NONE', 'ANSI'].includes(enc)) {
+      return buf.toString('latin1');
+    }
+    const utf8Str = buf.toString('utf8');
+    if (utf8Str.includes('\uFFFD')) {
+      return buf.toString('latin1');
+    }
+    return utf8Str;
+  }
+
   private async resolveRowValues(row: Record<string, any>): Promise<Record<string, any>> {
+    const encoding = this.config?.options?.charset || this.config?.options?.encoding || 'WIN1252';
     const result: Record<string, any> = {};
+
     for (const [k, v] of Object.entries(row)) {
       if (typeof v === 'function') {
         try {
           result[k] = await new Promise<string>((resolve) => {
             v((err: any, _name: any, emitter: any) => {
               if (err) return resolve('[BLOB]');
-              let data = '';
+              const chunks: Buffer[] = [];
               emitter.on('data', (chunk: any) => {
-                data += chunk.toString();
+                if (Buffer.isBuffer(chunk)) chunks.push(chunk);
+                else chunks.push(Buffer.from(String(chunk)));
               });
               emitter.on('end', () => {
-                resolve(data);
+                const combined = Buffer.concat(chunks);
+                resolve(this.decodeBuffer(combined, encoding));
               });
               emitter.on('error', () => {
                 resolve('[BLOB]');
@@ -274,7 +294,7 @@ export class FirebirdDriver implements DatabaseDriver {
           result[k] = '[BLOB]';
         }
       } else if (Buffer.isBuffer(v)) {
-        result[k] = v.toString('utf8');
+        result[k] = this.decodeBuffer(v, encoding);
       } else if (v instanceof Date) {
         result[k] = v.toISOString();
       } else {

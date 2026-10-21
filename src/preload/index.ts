@@ -10,15 +10,16 @@ export const api = {
   getActiveConnections: () => ipcRenderer.invoke(IPC_CHANNELS.DB_GET_ACTIVE_CONNECTIONS),
 
   // Metadata
+  listDatabases: (config: ConnectionConfig) => ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_DATABASES, config),
   listTables: (connectionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DB_LIST_TABLES, connectionId),
-  describeTable: (connectionId: string, tableName: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_DESCRIBE_TABLE, connectionId, tableName),
+  describeTable: (connectionId: string, tableName: string, schema?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_DESCRIBE_TABLE, connectionId, tableName, schema),
 
   // Query & CRUD
   executeQuery: (connectionId: string, query: string, options?: any) =>
     ipcRenderer.invoke(IPC_CHANNELS.DB_EXECUTE_QUERY, connectionId, query, options),
-  getTableData: (connectionId: string, tableName: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.DB_GET_TABLE_DATA, connectionId, tableName),
+  getTableData: (connectionId: string, tableName: string, schema?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DB_GET_TABLE_DATA, connectionId, tableName, schema),
   insertRow: (connectionId: string, tableName: string, data: Record<string, any>) =>
     ipcRenderer.invoke(IPC_CHANNELS.DB_INSERT_ROW, connectionId, tableName, data),
   updateRow: (

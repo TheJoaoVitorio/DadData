@@ -19,7 +19,18 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron/main',
             rollupOptions: {
-              external: ['electron', 'exceljs', 'sql.js', 'node-firebird']
+              external: [
+                'electron',
+                'exceljs',
+                'sql.js',
+                'node-firebird',
+                'pg',
+                'pg-native',
+                'mysql2',
+                'mysql2/promise',
+                'tedious',
+                'mongodb'
+              ]
             }
           },
           resolve: {

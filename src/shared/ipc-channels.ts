@@ -6,6 +6,7 @@ export const IPC_CHANNELS = {
   DB_GET_ACTIVE_CONNECTIONS: 'db:get-active-connections',
   
   // Metadata & Schema
+  DB_LIST_DATABASES: 'db:list-databases',
   DB_LIST_TABLES: 'db:list-tables',
   DB_DESCRIBE_TABLE: 'db:describe-table',
   

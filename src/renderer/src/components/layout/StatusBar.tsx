@@ -7,6 +7,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { ConnectionConfig, QueryResult } from '@shared/types/database';
+import { NumberTicker } from '../magicui/number-ticker';
 
 interface StatusBarProps {
   activeConnection: ConnectionConfig | null;
@@ -69,7 +70,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         <div className="flex items-center gap-1 font-mono text-[11px] text-zinc-600">
           <span className="text-zinc-400">linhas:</span>
-          <span className="font-bold text-amber-700">{rowCount}</span>
+          <span className="font-bold text-amber-700">
+            <NumberTicker value={rowCount} />
+          </span>
         </div>
 
         <div className="flex items-center gap-1 font-mono text-[11px] text-zinc-600">

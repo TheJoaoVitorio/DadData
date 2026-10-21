@@ -23,6 +23,13 @@ export const safeApi = {
     return [];
   },
 
+  listDatabases: async (config: ConnectionConfig): Promise<string[]> => {
+    if (window.api && typeof window.api.listDatabases === 'function') {
+      return window.api.listDatabases(config);
+    }
+    throw new Error('A busca de bancos no servidor requer o aplicativo Desktop Electron para realizar a conexão de rede.');
+  },
+
   listTables: async (connectionId: string): Promise<TableInfo[]> => {
     if (window.api) return window.api.listTables(connectionId);
     return [
@@ -48,8 +55,8 @@ export const safeApi = {
     ];
   },
 
-  describeTable: async (connectionId: string, tableName: string): Promise<ColumnInfo[]> => {
-    if (window.api) return window.api.describeTable(connectionId, tableName);
+  describeTable: async (connectionId: string, tableName: string, schema?: string): Promise<ColumnInfo[]> => {
+    if (window.api) return (window.api as any).describeTable(connectionId, tableName, schema);
     if (tableName.toLowerCase().includes('customer')) {
       return [
         { name: 'customer_id', type: 'INTEGER', isPrimaryKey: true, nullable: false },
@@ -95,8 +102,8 @@ export const safeApi = {
     };
   },
 
-  getTableData: async (connectionId: string, tableName: string): Promise<QueryResult> => {
-    if (window.api) return window.api.getTableData(connectionId, tableName);
+  getTableData: async (connectionId: string, tableName: string, schema?: string): Promise<QueryResult> => {
+    if (window.api) return (window.api as any).getTableData(connectionId, tableName, schema);
     return {
       columns: ['CODIGO', 'NOME', 'CIDADE', 'SALDO', 'ATIVO'],
       rows: [
@@ -173,6 +180,31 @@ export const safeApi = {
 
   exportData: async (connectionId: string, options: ExportOptions) => {
     if (window.api) return window.api.exportData(connectionId, options);
+
+    // Web Fallback: download direct CSV in browser
+    if (options.rows && options.rows.length > 0) {
+      const cols = options.columns && options.columns.length > 0 ? options.columns : Object.keys(options.rows[0]);
+      const header = cols.join(',');
+      const rowsLines = options.rows.map(r =>
+        cols.map(c => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(',')
+      );
+      const csv = '\uFEFF' + [header, ...rowsLines].join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = options.targetFilePath || 'export.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      return {
+        success: true,
+        filePath: options.targetFilePath || 'export.csv',
+        rowCount: options.rows.length,
+        fileSizeBytes: blob.size,
+        message: 'Download concluído via navegador!'
+      };
+    }
+
     return {
       success: true,
       filePath: options.targetFilePath || 'export.csv',
