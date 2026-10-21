@@ -2,11 +2,10 @@
   "name": "daddata",
   "version": "1.0.0",
   "type": "module",
-  "description": "Universal Modern & Legacy Database Client with Nocra UI",
-  "main": "dist-electron/main/index.js",
+  "description": "Universal Modern & Legacy Database Client with Nocra UI and Tauri v2 + Rust Engine",
   "scripts": {
     "dev": "vite",
-    "desktop": "electron .",
+    "desktop": "tauri dev",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run --config vitest.config.ts",
@@ -19,7 +18,8 @@
     "client",
     "sql",
     "nosql",
-    "electron",
+    "tauri",
+    "rust",
     "paradox",
     "dbf",
     "access",
@@ -59,13 +59,10 @@
     "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
-    "electron": "^35.0.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",
     "vite": "^6.2.0",
-    "vite-plugin-electron": "^0.29.0",
-    "vite-plugin-electron-renderer": "^0.14.6",
     "vitest": "^3.0.7"
   }
 }

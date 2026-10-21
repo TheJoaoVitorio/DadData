@@ -7,12 +7,12 @@ Este arquivo documenta a equipe de agentes autônomos e suas competências no pr
 ## 👥 Especialistas e Papéis
 
 ### 1. 🏛️ Arquiteto de Software (`software-architect`)
-- **Escopo**: Arquitetura do projeto, padronização de pastas, separação entre camadas (Main, Preload, Renderer, Shared e Drivers).
+- **Escopo**: Arquitetura do projeto, padronização de pastas, separação entre camadas (Tauri Backend em Rust, Frontend Renderer em React, Shared e Services).
 - **Padrões de Mercado**:
   - Clean Architecture & Ports-and-Adapters (Hexagonal Architecture).
-  - Factory Pattern e Adapter Pattern para drivers de banco de dados (`DatabaseDriver`).
-  - Strict Context Isolation e segurança no IPC do Electron.
-  - Tipagem estrita ponta a ponta com TypeScript.
+  - Motor de banco de dados assíncrono em Rust com tokio e rusqlite.
+  - Segurança e contratos estritos via Tauri v2 commands (`#[tauri::command]`).
+  - Tipagem estrita ponta a ponta com TypeScript e Serde.
 - **Skill Associada**: `.agents/skills/software-architecture/SKILL.md`
 
 ---
@@ -28,10 +28,10 @@ Este arquivo documenta a equipe de agentes autônomos e suas competências no pr
     - DBF (dBase III/IV/FoxPro/Clipper)
     - Firebird (1.5 a 5.0)
   - **Modernos & Cloud**:
-    - PostgreSQL (v9.x a v17.x)
+    - PostgreSQL (v9.x a v17.x) via tokio-postgres
     - MySQL (5.5 a 8.4) & MariaDB
     - Microsoft SQL Server (T-SQL)
-    - SQLite 3 (em memória e arquivo)
+    - SQLite 3 (em memória e arquivo) via rusqlite
     - MongoDB (NoSQL)
 - **Funcionalidades**:
   - Introspecção completa de tabelas, campos, chaves primárias e tipos de dados.
@@ -42,11 +42,11 @@ Este arquivo documenta a equipe de agentes autônomos e suas competências no pr
 ---
 
 ### 3. ⚙️ Especialista em Backend (`backend-specialist`)
-- **Escopo**: Electron Main Process, Node.js, contratos de IPC, gerenciamento de pooling de conexões e exportação.
+- **Escopo**: Tauri v2, Motor nativo em Rust, Tokio, pooling de conexões assíncronas e exportação streaming.
 - **Mecanismos**:
-  - Gerenciamento de ciclo de vida de instâncias de conexões ativas.
-  - Mecanismo de exportação de dados para **CSV** e **Excel (.xlsx)** com paginação/streaming de alto desempenho.
-  - Diálogos nativos do Electron para salvar arquivos e selecionar arquivos de bancos locais (.db, .dbf, .fic, .mdb, .sqlite).
+  - Gerenciamento de ciclo de vida de instâncias de conexões ativas com `EngineManager`.
+  - Mecanismo de exportação de dados para **CSV** e **Excel (.xlsx)** nativo via `rust_xlsxwriter` com alto desempenho.
+  - Diálogos nativos do sistema operacional via `@tauri-apps/plugin-dialog`.
   - Tratamento resiliente de falhas de rede e timeouts.
 - **Skill Associada**: `.agents/skills/backend-ipc-engine/SKILL.md`
 

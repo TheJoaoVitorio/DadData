@@ -2,16 +2,15 @@ import { ConnectionConfig, ExportOptions, QueryResult, TableInfo, ColumnInfo, Mu
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 
-export const isDesktopElectron = typeof window !== 'undefined' && !!(window as any).api;
 export const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
-export const isDesktop = isDesktopElectron || isTauri;
+export const isDesktop = isTauri;
+export const isDesktopElectron = false;
 
 export const safeApi = {
   connect: async (config: ConnectionConfig) => {
     if (isTauri) {
       return invoke<any>('db_connect', { config });
     }
-    if ((window as any).api) return (window as any).api.connect(config);
     return { success: true, connectionId: config.id, databaseName: config.name, serverVersion: 'Web Fallback' };
   },
 
@@ -20,7 +19,6 @@ export const safeApi = {
       await invoke('db_disconnect', { connectionId });
       return { success: true };
     }
-    if ((window as any).api) return (window as any).api.disconnect(connectionId);
     return { success: true };
   },
 
@@ -28,12 +26,10 @@ export const safeApi = {
     if (isTauri) {
       return invoke<any>('db_test_connection', { config });
     }
-    if ((window as any).api) return (window as any).api.testConnection(config);
-    return { success: true, message: 'Conexão simulada no navegador (abra via Desktop Electron ou Tauri para modo nativo).' };
+    return { success: true, message: 'Conexão simulada no navegador (abra via Desktop Tauri para motor nativo em Rust).' };
   },
 
   getActiveConnections: async () => {
-    if ((window as any).api) return (window as any).api.getActiveConnections();
     return [];
   },
 
@@ -41,17 +37,13 @@ export const safeApi = {
     if (isTauri) {
       return invoke<string[]>('db_list_databases', { config });
     }
-    if ((window as any).api && typeof (window as any).api.listDatabases === 'function') {
-      return (window as any).api.listDatabases(config);
-    }
-    throw new Error('A busca de bancos no servidor requer o aplicativo Desktop para realizar a conexão de rede.');
+    throw new Error('A busca de bancos no servidor requer o aplicativo Desktop Tauri para realizar a conexão de rede.');
   },
 
   listTables: async (connectionId: string): Promise<TableInfo[]> => {
     if (isTauri) {
       return invoke<TableInfo[]>('db_list_tables', { connectionId });
     }
-    if ((window as any).api) return (window as any).api.listTables(connectionId);
     return [
       { name: 'actor', type: 'table', rowCount: 200, schema: 'public' },
       { name: 'address', type: 'table', rowCount: 603, schema: 'public' },
@@ -79,7 +71,6 @@ export const safeApi = {
     if (isTauri) {
       return invoke<ColumnInfo[]>('db_describe_table', { connectionId, tableName, schema });
     }
-    if ((window as any).api) return (window as any).api.describeTable(connectionId, tableName, schema);
     if (tableName.toLowerCase().includes('customer')) {
       return [
         { name: 'customer_id', type: 'INTEGER', isPrimaryKey: true, nullable: false },
@@ -111,11 +102,10 @@ export const safeApi = {
     ];
   },
 
-  executeQuery: async (connectionId: string, query: string, options?: any): Promise<QueryResult> => {
+  executeQuery: async (connectionId: string, query: string, _options?: any): Promise<QueryResult> => {
     if (isTauri) {
       return invoke<QueryResult>('db_execute_query', { connectionId, query });
     }
-    if ((window as any).api) return (window as any).api.executeQuery(connectionId, query, options);
     return {
       columns: ['CODIGO', 'NOME', 'CIDADE', 'SALDO'],
       rows: [
@@ -143,7 +133,6 @@ export const safeApi = {
         offset: options?.offset ?? 0
       });
     }
-    if ((window as any).api) return (window as any).api.getTableData(connectionId, tableName, schema, options);
     const limit = options?.limit ?? 300;
     const offset = options?.offset ?? 0;
     const mockRows = [
@@ -171,8 +160,7 @@ export const safeApi = {
     if (isTauri) {
       return invoke<MutationResult>('db_insert_row', { connectionId, tableName, schema: null, data });
     }
-    if ((window as any).api) return (window as any).api.insertRow(connectionId, tableName, data);
-    return { success: true, affectedRows: 1, insertedId: Date.now() };
+    return { success: true, affectedRows: 1, insertedId: Date.now().toString() };
   },
 
   updateRow: async (
@@ -184,7 +172,6 @@ export const safeApi = {
     if (isTauri) {
       return invoke<MutationResult>('db_update_row', { connectionId, tableName, schema: null, primaryKey, changes });
     }
-    if ((window as any).api) return (window as any).api.updateRow(connectionId, tableName, primaryKey, changes);
     return { success: true, affectedRows: 1 };
   },
 
@@ -192,7 +179,6 @@ export const safeApi = {
     if (isTauri) {
       return invoke<MutationResult>('db_delete_row', { connectionId, tableName, schema: null, primaryKey });
     }
-    if ((window as any).api) return (window as any).api.deleteRow(connectionId, tableName, primaryKey);
     return { success: true, affectedRows: 1 };
   },
 
@@ -204,9 +190,6 @@ export const safeApi = {
         filters
       });
       return selected as string | null;
-    }
-    if ((window as any).api && typeof (window as any).api.openFileDialog === 'function') {
-      return (window as any).api.openFileDialog(filters);
     }
 
     // Web Fallback: Create input[type="file"] so it never errors
@@ -237,9 +220,6 @@ export const safeApi = {
       });
       return selected as string | null;
     }
-    if ((window as any).api && typeof (window as any).api.openDirectoryDialog === 'function') {
-      return (window as any).api.openDirectoryDialog();
-    }
     return prompt('Informe o caminho da pasta de banco de dados:');
   },
 
@@ -251,17 +231,13 @@ export const safeApi = {
       });
       return selected;
     }
-    if ((window as any).api && typeof (window as any).api.saveFileDialog === 'function') {
-      return (window as any).api.saveFileDialog(defaultName, ext);
-    }
     return defaultName;
   },
 
-  exportData: async (connectionId: string, options: ExportOptions) => {
+  exportData: async (_connectionId: string, options: ExportOptions) => {
     if (isTauri) {
       return invoke<any>('export_data', { options });
     }
-    if ((window as any).api) return (window as any).api.exportData(connectionId, options);
 
     // Web Fallback: download direct CSV in browser
     if (options.rows && options.rows.length > 0) {

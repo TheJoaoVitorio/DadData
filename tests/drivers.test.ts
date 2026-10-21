@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import { DriverManager } from '../src/drivers/driver-manager';
-import { ExportService } from '../src/main/export/export-service';
+import { ExportService } from '../src/services/export-service';
 
 describe('DadData Database Drivers & Export Suite', () => {
   const driverManager = DriverManager.getInstance();
