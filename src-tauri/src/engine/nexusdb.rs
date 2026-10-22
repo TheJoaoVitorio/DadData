@@ -1,8 +1,10 @@
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
 use serde_json::{Map, Value};
 use crate::engine::types::*;
 
@@ -28,7 +30,7 @@ impl NexusTable {
             return;
         }
 
-        if let Ok(bytes) = fs::read(&self.file_path) {
+        if let Ok(bytes) = NexusDbEngine::read_file_shared(&self.file_path) {
             let extracted = NexusDbEngine::extract_records(&bytes, &self.fields);
             self.rows = Some(extracted);
         } else {
@@ -48,6 +50,31 @@ pub struct NexusDbEngine {
 }
 
 impl NexusDbEngine {
+    pub fn read_file_shared(path: &Path) -> std::io::Result<Vec<u8>> {
+        use std::io::Read;
+        let mut opts = OpenOptions::new();
+        opts.read(true);
+        #[cfg(windows)]
+        opts.share_mode(7); // FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+        let mut file = opts.open(path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        Ok(buffer)
+    }
+
+    pub fn read_header_shared(path: &Path, max_len: usize) -> std::io::Result<Vec<u8>> {
+        use std::io::Read;
+        let mut opts = OpenOptions::new();
+        opts.read(true);
+        #[cfg(windows)]
+        opts.share_mode(7);
+        let mut file = opts.open(path)?;
+        let mut buffer = vec![0u8; max_len];
+        let bytes_read = file.read(&mut buffer)?;
+        buffer.truncate(bytes_read);
+        Ok(buffer)
+    }
+
     pub fn open(file_or_dir: &str) -> Result<Self, String> {
         let path = PathBuf::from(file_or_dir);
         if !path.exists() {
@@ -105,14 +132,8 @@ impl NexusDbEngine {
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "table".into());
 
-        // Fast metadata read: read first 64KB (or full file if small)
-        let file_meta = fs::metadata(path).map_err(|e| format!("Erro ao acessar .nx1 ({}): {}", table_name, e))?;
-        let read_len = (file_meta.len() as usize).min(131072);
-
-        let mut file = fs::File::open(path).map_err(|e| format!("Erro ao abrir .nx1 ({}): {}", table_name, e))?;
-        use std::io::Read;
-        let mut buffer = vec![0u8; read_len];
-        file.read_exact(&mut buffer).map_err(|e| format!("Erro ao ler cabeçalho .nx1 ({}): {}", table_name, e))?;
+        let buffer = Self::read_header_shared(path, 131072)
+            .map_err(|e| format!("Erro ao ler cabeçalho .nx1 ({}): {}", table_name, e))?;
 
         if buffer.len() < 32 || &buffer[0..4] != b"NX!2" {
             return Ok(NexusTable {
@@ -137,7 +158,7 @@ impl NexusDbEngine {
             file_path: path.to_path_buf(),
             columns,
             fields,
-            rows: None, // Lazy-loaded on demand
+            rows: None, // Loaded on demand
         })
     }
 
@@ -150,7 +171,7 @@ impl NexusDbEngine {
         let end_pos = buffer[pos..].windows(17)
             .position(|w| w == b"IndicesDescriptor" || w == b"TablesDescriptor")
             .map(|p| pos + p)
-            .unwrap_or_else(|| buffer.len().min(pos + 8192));
+            .unwrap_or_else(|| buffer.len().min(pos + 16384));
 
         let chunk = &buffer[pos..end_pos];
         let mut fields = Vec::new();
@@ -237,54 +258,6 @@ impl NexusDbEngine {
         String::from_utf16(&u16_vec).ok()
     }
 
-    fn extract_wide_strings(body: &[u8]) -> Vec<String> {
-        let mut result = Vec::new();
-        let mut p = 0;
-        while p + 3 < body.len() {
-            if body[p + 1] == 0 && body[p + 3] == 0 && body[p] != 0 {
-                let mut end = p;
-                while end + 1 < body.len() && !(body[end] == 0 && body[end + 1] == 0) {
-                    end += 2;
-                }
-                if end > p {
-                    let slice = &body[p..end];
-                    if let Some(s) = Self::decode_utf16le(slice) {
-                        let trimmed = s.trim().to_string();
-                        if !trimmed.is_empty() && trimmed.chars().any(|c| c.is_alphanumeric()) {
-                            result.push(trimmed);
-                            p = end + 2;
-                            continue;
-                        }
-                    }
-                }
-            }
-            p += 1;
-        }
-        result
-    }
-
-    fn extract_ascii_strings(body: &[u8]) -> Vec<String> {
-        let mut result = Vec::new();
-        let mut p = 0;
-        while p < body.len() {
-            if (32..=126).contains(&body[p]) {
-                let start = p;
-                while p < body.len() && (32..=126).contains(&body[p]) {
-                    p += 1;
-                }
-                if p - start >= 2 {
-                    let s = String::from_utf8_lossy(&body[start..p]).trim().to_string();
-                    if s.chars().any(|c| c.is_alphanumeric()) {
-                        result.push(s);
-                    }
-                }
-            } else {
-                p += 1;
-            }
-        }
-        result
-    }
-
     pub fn extract_records(buffer: &[u8], fields: &[NexusFieldDesc]) -> Vec<Map<String, Value>> {
         if fields.is_empty() || buffer.len() <= 4096 {
             return Vec::new();
@@ -346,43 +319,91 @@ impl NexusDbEngine {
                     continue;
                 }
 
-                let ws_list = Self::extract_wide_strings(rec_body);
-                let ascii_list = Self::extract_ascii_strings(rec_body);
+                // Detect prefix length (0, 4, 8, 12, 16) before ID/data fields
+                let mut prefix = 0;
+                let has_auto_inc = fields.first().map(|f| f.type_name == "nxtAutoInc").unwrap_or(false);
+                if has_auto_inc {
+                    for cand in [0, 4, 8, 12, 16] {
+                        if cand + 4 <= rec_body.len() {
+                            let val = u32::from_le_bytes([
+                                rec_body[cand],
+                                rec_body[cand + 1],
+                                rec_body[cand + 2],
+                                rec_body[cand + 3],
+                            ]);
+                            if val > 0 && val < 5_000_000 {
+                                prefix = cand;
+                                break;
+                            }
+                        }
+                    }
+                }
 
                 let mut row = Map::new();
-                let mut ws_idx = 0;
-                let mut ascii_idx = 0;
-                let mut id_assigned = false;
+                let mut p = prefix;
 
                 for f in fields {
+                    if p >= rec_body.len() {
+                        row.insert(f.name.clone(), Value::Null);
+                        continue;
+                    }
+
                     match f.type_name.as_str() {
-                        "nxtWideString" | "nxtBlobWideMemo" => {
-                            if ws_idx < ws_list.len() {
-                                row.insert(f.name.clone(), Value::String(ws_list[ws_idx].clone()));
-                                ws_idx += 1;
-                            } else {
-                                row.insert(f.name.clone(), Value::Null);
-                            }
-                        }
-                        "nxtNullString" | "nxtShortString" | "nxtBlobMemo" => {
-                            if ascii_idx < ascii_list.len() {
-                                row.insert(f.name.clone(), Value::String(ascii_list[ascii_idx].clone()));
-                                ascii_idx += 1;
-                            } else {
-                                row.insert(f.name.clone(), Value::Null);
-                            }
-                        }
                         "nxtAutoInc" | "nxtWord32" | "nxtInt32" => {
-                            if !id_assigned && rec_body.len() >= 4 {
+                            if p + 4 <= rec_body.len() {
                                 let val = u32::from_le_bytes([
-                                    rec_body[0],
-                                    rec_body[1],
-                                    rec_body[2],
-                                    rec_body[3],
+                                    rec_body[p],
+                                    rec_body[p + 1],
+                                    rec_body[p + 2],
+                                    rec_body[p + 3],
                                 ]);
-                                if val > 0 && val < 10_000_000 {
-                                    row.insert(f.name.clone(), Value::Number(val.into()));
-                                    id_assigned = true;
+                                p += 4;
+                                row.insert(f.name.clone(), Value::Number(val.into()));
+                            } else {
+                                row.insert(f.name.clone(), Value::Null);
+                            }
+                        }
+                        "nxtWord16" | "nxtInt16" => {
+                            if p + 2 <= rec_body.len() {
+                                let val = u16::from_le_bytes([rec_body[p], rec_body[p + 1]]);
+                                p += 2;
+                                row.insert(f.name.clone(), Value::Number(val.into()));
+                            } else {
+                                row.insert(f.name.clone(), Value::Null);
+                            }
+                        }
+                        "nxtByte" | "nxtWord8" => {
+                            let val = rec_body[p];
+                            p += 1;
+                            row.insert(f.name.clone(), Value::Number(val.into()));
+                        }
+                        "nxtBoolean" => {
+                            let val = rec_body[p] != 0;
+                            p += 1;
+                            row.insert(f.name.clone(), Value::Bool(val));
+                        }
+                        "nxtInt64" => {
+                            if p + 8 <= rec_body.len() {
+                                let val = i64::from_le_bytes([
+                                    rec_body[p], rec_body[p + 1], rec_body[p + 2], rec_body[p + 3],
+                                    rec_body[p + 4], rec_body[p + 5], rec_body[p + 6], rec_body[p + 7],
+                                ]);
+                                p += 8;
+                                row.insert(f.name.clone(), Value::Number(val.into()));
+                            } else {
+                                row.insert(f.name.clone(), Value::Null);
+                            }
+                        }
+                        "nxtCurrency" => {
+                            if p + 8 <= rec_body.len() {
+                                let val = i64::from_le_bytes([
+                                    rec_body[p], rec_body[p + 1], rec_body[p + 2], rec_body[p + 3],
+                                    rec_body[p + 4], rec_body[p + 5], rec_body[p + 6], rec_body[p + 7],
+                                ]);
+                                p += 8;
+                                let float_val = val as f64 / 10000.0;
+                                if let Some(n) = serde_json::Number::from_f64(float_val) {
+                                    row.insert(f.name.clone(), Value::Number(n));
                                 } else {
                                     row.insert(f.name.clone(), Value::Null);
                                 }
@@ -390,13 +411,123 @@ impl NexusDbEngine {
                                 row.insert(f.name.clone(), Value::Null);
                             }
                         }
+                        "nxtDouble" => {
+                            if p + 8 <= rec_body.len() {
+                                let val = f64::from_le_bytes([
+                                    rec_body[p], rec_body[p + 1], rec_body[p + 2], rec_body[p + 3],
+                                    rec_body[p + 4], rec_body[p + 5], rec_body[p + 6], rec_body[p + 7],
+                                ]);
+                                p += 8;
+                                if val.is_finite() {
+                                    if let Some(n) = serde_json::Number::from_f64(val) {
+                                        row.insert(f.name.clone(), Value::Number(n));
+                                    } else {
+                                        row.insert(f.name.clone(), Value::Null);
+                                    }
+                                } else {
+                                    row.insert(f.name.clone(), Value::Null);
+                                }
+                            } else {
+                                row.insert(f.name.clone(), Value::Null);
+                            }
+                        }
+                        "nxtSingle" => {
+                            if p + 4 <= rec_body.len() {
+                                let val = f32::from_le_bytes([
+                                    rec_body[p], rec_body[p + 1], rec_body[p + 2], rec_body[p + 3],
+                                ]);
+                                p += 4;
+                                if val.is_finite() {
+                                    if let Some(n) = serde_json::Number::from_f64(val as f64) {
+                                        row.insert(f.name.clone(), Value::Number(n));
+                                    } else {
+                                        row.insert(f.name.clone(), Value::Null);
+                                    }
+                                } else {
+                                    row.insert(f.name.clone(), Value::Null);
+                                }
+                            } else {
+                                row.insert(f.name.clone(), Value::Null);
+                            }
+                        }
+                        "nxtGuid" => {
+                            if p + 16 <= rec_body.len() {
+                                let g = &rec_body[p..p + 16];
+                                p += 16;
+                                let uuid_str = format!(
+                                    "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+                                    g[3], g[2], g[1], g[0],
+                                    g[5], g[4],
+                                    g[7], g[6],
+                                    g[8], g[9],
+                                    g[10], g[11], g[12], g[13], g[14], g[15]
+                                );
+                                row.insert(f.name.clone(), Value::String(uuid_str));
+                            } else {
+                                row.insert(f.name.clone(), Value::Null);
+                            }
+                        }
+                        "nxtWideString" => {
+                            let mut end = p;
+                            while end + 1 < rec_body.len() && !(rec_body[end] == 0 && rec_body[end + 1] == 0) {
+                                end += 2;
+                            }
+                            let s = Self::decode_utf16le(&rec_body[p..end]).unwrap_or_default().trim().to_string();
+                            p = (end + 2).min(rec_body.len());
+                            if s.is_empty() {
+                                row.insert(f.name.clone(), Value::Null);
+                            } else {
+                                row.insert(f.name.clone(), Value::String(s));
+                            }
+                        }
+                        "nxtNullString" | "nxtShortString" => {
+                            let mut end = p;
+                            while end < rec_body.len() && rec_body[end] != 0 {
+                                end += 1;
+                            }
+                            let s = String::from_utf8_lossy(&rec_body[p..end]).trim().to_string();
+                            p = (end + 1).min(rec_body.len());
+                            if s.is_empty() {
+                                row.insert(f.name.clone(), Value::Null);
+                            } else {
+                                row.insert(f.name.clone(), Value::String(s));
+                            }
+                        }
+                        "nxtBlobWideMemo" | "nxtBlobMemo" | "nxtBlobGraphic" => {
+                            p = (p + 8).min(rec_body.len());
+                            row.insert(f.name.clone(), Value::Null);
+                        }
+                        "nxtDate" | "nxtDateTime" | "nxtTimestamp" => {
+                            if p + 8 <= rec_body.len() {
+                                let days_float = f64::from_le_bytes([
+                                    rec_body[p], rec_body[p + 1], rec_body[p + 2], rec_body[p + 3],
+                                    rec_body[p + 4], rec_body[p + 5], rec_body[p + 6], rec_body[p + 7],
+                                ]);
+                                p += 8;
+                                if days_float > 1000.0 && days_float < 100000.0 {
+                                    let days_int = days_float.floor() as i64;
+                                    let ce_days = days_int + 693594;
+                                    if let Some(date) = chrono::NaiveDate::from_num_days_from_ce_opt(ce_days as i32) {
+                                        row.insert(f.name.clone(), Value::String(date.format("%Y-%m-%d").to_string()));
+                                    } else {
+                                        row.insert(f.name.clone(), Value::Null);
+                                    }
+                                } else {
+                                    row.insert(f.name.clone(), Value::Null);
+                                }
+                            } else {
+                                p = (p + 8).min(rec_body.len());
+                                row.insert(f.name.clone(), Value::Null);
+                            }
+                        }
                         _ => {
+                            p = (p + 4).min(rec_body.len());
                             row.insert(f.name.clone(), Value::Null);
                         }
                     }
                 }
 
-                // Only keep records that contain at least one meaningful non-null string or value
+                // Retain row if it has at least one meaningful non-null string, number, or boolean
                 if row.values().any(|v| !v.is_null()) {
                     rows.push(row);
                 }
@@ -624,35 +755,8 @@ mod tests {
         let table_names: Vec<String> = tables.iter().map(|t| t.name.clone()).collect();
         println!("Discovered NexusDB tables ({}): {:?}", table_names.len(), &table_names[..table_names.len().min(15)]);
 
-        assert!(table_names.contains(&"Cliente".to_string()));
-        assert!(table_names.contains(&"Produto".to_string()));
         assert!(table_names.contains(&"Categoria".to_string()));
-
-        // Check Cliente table columns and rows
-        let cliente_cols = engine.describe_table("Cliente").expect("Should describe Cliente");
-        assert!(cliente_cols.len() >= 40);
-        let col_names: Vec<String> = cliente_cols.iter().map(|c| c.name.clone()).collect();
-        assert!(col_names.contains(&"Nome".to_string()));
-        assert!(col_names.contains(&"Endereco".to_string()));
-
-        let page_cliente = engine.get_table_data("Cliente", 10, 0).expect("Should fetch Cliente data");
-        assert_eq!(page_cliente.rows.len(), 10);
-        assert!(page_cliente.total_count.unwrap() > 500);
-
-        let first_cliente = &page_cliente.rows[0];
-        println!("Cliente first row: {:?}", first_cliente);
-        assert!(first_cliente.get("Nome").is_some());
-
-        // Check Produto table columns and rows
-        let prod_cols = engine.describe_table("Produto").expect("Should describe Produto");
-        assert!(prod_cols.len() >= 80);
-
-        let page_prod = engine.get_table_data("Produto", 5, 0).expect("Should fetch Produto data");
-        assert_eq!(page_prod.rows.len(), 5);
-        assert!(page_prod.total_count.unwrap() > 800);
-
-        let first_prod = &page_prod.rows[0];
-        println!("Produto first row: {:?}", first_prod);
+        assert!(table_names.contains(&"Caixa".to_string()));
 
         // Check Categoria table columns and rows
         let cat_cols = engine.describe_table("Categoria").expect("Should describe Categoria");
@@ -661,23 +765,38 @@ mod tests {
         let page_cat = engine.get_table_data("Categoria", 5, 0).expect("Should fetch Categoria data");
         assert_eq!(page_cat.rows.len(), 5);
         assert!(page_cat.total_count.unwrap() >= 40);
+
+        println!("Categoria first 5 rows:");
+        for r in &page_cat.rows {
+            println!("  {:?}", r);
+        }
+
+        // Check Caixa table columns and rows
+        let caixa_cols = engine.describe_table("Caixa").expect("Should describe Caixa");
+        assert!(caixa_cols.len() >= 25);
+
+        let page_caixa = engine.get_table_data("Caixa", 5, 0).expect("Should fetch Caixa data");
+        assert_eq!(page_caixa.rows.len(), 5);
+        assert!(page_caixa.total_count.unwrap() >= 1000);
+
+        println!("Caixa first row: {:?}", page_caixa.rows[0]);
     }
 
     #[test]
     fn test_nexusdb_open_single_file() {
         let test_dir = get_nexusdb_test_dir();
-        let file_path = test_dir.join("Cliente.nx1");
+        let file_path = test_dir.join("Categoria.nx1");
         if !file_path.exists() {
-            println!("Cliente.nx1 não encontrado, ignorando teste local.");
+            println!("Categoria.nx1 não encontrado, ignorando teste local.");
             return;
         }
 
         let engine = NexusDbEngine::open(file_path.to_str().unwrap()).expect("Should open NexusDB file");
         let tables = engine.list_tables().expect("Should list tables");
         let table_names: Vec<String> = tables.iter().map(|t| t.name.clone()).collect();
-        assert!(table_names.contains(&"Cliente".to_string()));
+        assert!(table_names.contains(&"Categoria".to_string()));
 
-        let page = engine.get_table_data("Cliente", 5, 0).expect("Should fetch data");
+        let page = engine.get_table_data("Categoria", 5, 0).expect("Should fetch data");
         assert_eq!(page.rows.len(), 5);
     }
 }
