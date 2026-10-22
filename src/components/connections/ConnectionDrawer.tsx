@@ -28,6 +28,8 @@ interface ConnectionDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onConnect: (config: ConnectionConfig) => Promise<void>;
+  onSaveEdit?: (config: ConnectionConfig) => Promise<void>;
+  initialConnection?: ConnectionConfig | null;
 }
 
 interface EngineOption {
@@ -147,7 +149,7 @@ const ENGINES: EngineOption[] = [
   }
 ];
 
-export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onClose, onConnect }) => {
+export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onClose, onConnect, onSaveEdit, initialConnection = null }) => {
   const [step, setStep] = useState<1 | 2>(1);
 
   // Engine & Filtering State
@@ -180,25 +182,44 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
   // Always reset fields to fresh defaults when opening drawer
   useEffect(() => {
     if (isOpen) {
-      setStep(1);
-      setSelectedEngine(ENGINES[0]);
-      setActiveCategory('all');
-      setSearchQuery('');
-      setConnName('Conexão PostgreSQL');
-      setFilePath('');
-      setHost('localhost');
-      setPort(5432);
-      setDatabase('');
-      setUser('postgres');
-      setPassword('');
-      setSsl(false);
-      setCharset('WIN1252');
-      setAuthType('sql');
-      setDiscoveredDatabases([]);
-      setDatabaseSearchError(null);
-      setTestResult(null);
+      if (initialConnection) {
+        setStep(2);
+        const eng = ENGINES.find(e => e.type === initialConnection.type) || ENGINES[0];
+        setSelectedEngine(eng);
+        setConnName(initialConnection.name || `Conexão ${eng.label}`);
+        setFilePath(initialConnection.filePath || '');
+        setHost(initialConnection.host || 'localhost');
+        setPort(initialConnection.port || eng.defaultPort || 5432);
+        setDatabase(initialConnection.database || '');
+        setUser(initialConnection.user || '');
+        setPassword(initialConnection.password || '');
+        setSsl(!!initialConnection.ssl);
+        setCharset(initialConnection.options?.charset || 'WIN1252');
+        setAuthType((initialConnection.authType === 'windows' ? 'windows' : 'sql') as any);
+        setDiscoveredDatabases([]);
+        setDatabaseSearchError(null);
+        setTestResult(null);
+      } else {
+        setStep(1);
+        setSelectedEngine(ENGINES[0]);
+        setActiveCategory('all');
+        setSearchQuery('');
+        setConnName('Conexão PostgreSQL');
+        setFilePath('');
+        setHost('localhost');
+        setPort(5432);
+        setDatabase('');
+        setUser('postgres');
+        setPassword('');
+        setSsl(false);
+        setCharset('WIN1252');
+        setAuthType('sql');
+        setDiscoveredDatabases([]);
+        setDatabaseSearchError(null);
+        setTestResult(null);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialConnection]);
 
   if (!isOpen) return null;
 
@@ -288,7 +309,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
 
   const buildConfig = (): ConnectionConfig => {
     const base: ConnectionConfig = {
-      id: `conn_${Date.now()}`,
+      id: initialConnection ? initialConnection.id : `conn_${Date.now()}`,
       name: connName || selectedEngine.label,
       type: selectedEngine.type
     };
@@ -383,8 +404,12 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
     setIsConnecting(true);
     try {
       const config = buildConfig();
-      await safeApi.saveConnection(config).catch(err => console.warn('Could not auto-save connection:', err));
-      await onConnect(config);
+      if (initialConnection && onSaveEdit) {
+        await onSaveEdit(config);
+      } else {
+        await safeApi.saveConnection(config).catch(err => console.warn('Could not auto-save connection:', err));
+        await onConnect(config);
+      }
       onClose();
     } catch (err: any) {
       setTestResult({
@@ -449,7 +474,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
           )}
 
           <div className="text-[11px] font-black uppercase tracking-widest text-amber-500">
-            PASSO {step} DE 2
+            {initialConnection ? 'EDITAR CONEXÃO' : `PASSO ${step} DE 2`}
           </div>
 
           <button
@@ -758,7 +783,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                           <FolderOpen className="w-3.5 h-3.5 text-amber-700" />
                           <span>Arquivo</span>
                         </button>
-                        {['dbf', 'paradox', 'hfsql'].includes(selectedEngine.type) && (
+                        {['dbf', 'paradox', 'hfsql', 'nexusdb'].includes(selectedEngine.type) && (
                           <button
                             type="button"
                             onClick={handleBrowseDir}
@@ -976,7 +1001,7 @@ export const ConnectionDrawer: React.FC<ConnectionDrawerProps> = ({ isOpen, onCl
                         disabled={isConnecting}
                         className="text-xs py-2.5 px-6"
                       >
-                        <span>{isConnecting ? 'Conectando...' : 'Salvar & Conectar'}</span>
+                        <span>{isConnecting ? 'Salvando...' : initialConnection ? 'Salvar Alterações' : 'Salvar & Conectar'}</span>
                       </ShinyButton>
                     </div>
                   </div>

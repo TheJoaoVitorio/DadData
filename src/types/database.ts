@@ -62,7 +62,7 @@ export interface TableInfo {
   name: string;
   schema?: string;
   rowCount?: number;
-  type: 'table' | 'view' | 'collection' | 'file';
+  type: 'table' | 'view' | 'collection' | 'file' | 'database';
   columns?: ColumnInfo[];
 }
 

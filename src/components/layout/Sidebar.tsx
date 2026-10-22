@@ -20,7 +20,8 @@ import {
   Table as LucideTable,
   Eye,
   Database,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { TableInfo, ConnectionConfig, ColumnInfo } from '@shared/types/database';
 import { DatabaseIcon } from '../icons/DatabaseIcon';
@@ -35,9 +36,10 @@ interface SidebarProps {
   activeDatabase?: string;
   tables: TableInfo[];
   selectedTable: string | null;
-  onSelectTable: (tableName: string, schema?: string) => void;
+  onSelectTable: (tableName: string, schema?: string, entityType?: string) => void;
   onSwitchConnection: (conn: ConnectionConfig) => void;
   onSwitchDatabase?: (dbName: string) => void;
+  onEditConnection?: (conn: ConnectionConfig) => void;
   onDisconnect: () => void;
   onDeleteConnection?: (connId: string) => void;
   onOpenNewQuery: () => void;
@@ -77,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTable,
   onSwitchConnection,
   onSwitchDatabase,
+  onEditConnection,
   onDisconnect,
   onDeleteConnection,
   onOpenNewQuery,
@@ -187,7 +190,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return (
       <div key={`${isPinnedItem ? 'pin_' : 'ent_'}${key}`} className="flex flex-col">
         <div
-          onClick={() => onSelectTable(entity.name, entity.schema)}
+          onClick={() => {
+            if (entity.type === 'database' && onSwitchDatabase) {
+              onSwitchDatabase(entity.name);
+            } else {
+              onSelectTable(entity.name, entity.schema, entity.type);
+            }
+          }}
           className={`h-7 px-2 flex items-center justify-between text-xs cursor-pointer group rounded-lg transition-colors select-none ${
             isSelected
               ? 'bg-amber-100 text-amber-950 font-bold border border-amber-300/80 shadow-xs'
@@ -195,19 +204,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           <div className="flex items-center gap-1.5 min-w-0">
-            <button
-              onClick={e => toggleExpandEntity(entity.name, entity.schema, e)}
-              className="p-0.5 -ml-1 text-zinc-400 hover:text-zinc-800 transition-transform cursor-pointer"
-              title="Ver colunas"
-            >
-              <ChevronRight
-                className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90 text-amber-600' : ''}`}
-              />
-            </button>
+            {entity.type !== 'database' && (
+              <button
+                onClick={e => toggleExpandEntity(entity.name, entity.schema, e)}
+                className="p-0.5 -ml-1 text-zinc-400 hover:text-zinc-800 transition-transform cursor-pointer"
+                title="Ver colunas"
+              >
+                <ChevronRight
+                  className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90 text-amber-600' : ''}`}
+                />
+              </button>
+            )}
 
-            {isView(entity) ? <ViewGridIcon /> : <TableGridIcon />}
+            {entity.type === 'database' ? (
+              <Database className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+            ) : isView(entity) ? (
+              <Eye className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
+            ) : (
+              <LucideTable className="w-3.5 h-3.5 text-sky-600 flex-shrink-0" />
+            )}
 
             <span className="truncate text-[12px]">{entity.name}</span>
+
+            {entity.type === 'database' && (
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold ml-1">
+                BANCO
+              </span>
+            )}
+            {entity.type === 'view' && (
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-900 border border-purple-300 font-bold ml-1">
+                VIEW
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -424,6 +452,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 font-mono">
                             {c.type}
                           </span>
+                          {onEditConnection && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsConnDropdownOpen(false);
+                                onEditConnection(c);
+                              }}
+                              title="Editar conexão"
+                              className="p-1 rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-amber-50 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          )}
                           {onDeleteConnection && (
                             <button
                               type="button"
@@ -583,7 +625,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <ChevronRight
                   className={`w-3 h-3 transition-transform ${isEntitiesSectionOpen ? 'rotate-90 text-amber-600' : ''}`}
                 />
-                <span>{activeRail === 'pinned' ? 'TABELAS FIXADAS' : 'TABELAS & VIEWS'}</span>
+                <span>{activeRail === 'pinned' ? 'TABELAS FIXADAS' : (tables.some(t => t.type === 'database') ? 'BANCOS DE DADOS DO SERVIDOR' : 'TABELAS & VIEWS')}</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-600 font-mono font-bold">
                   {displayList.length}
                 </span>

@@ -344,6 +344,7 @@ impl EngineManager {
         match engine {
             ActiveEngine::Postgres(pg) => pg.insert_row(table_name, schema, map_data).await,
             ActiveEngine::Sqlite(sq) => sq.insert_row(table_name, map_data),
+            ActiveEngine::NexusDb(nx) => nx.insert_row(table_name, map_data),
             _ => Ok(MutationResult {
                 success: true,
                 affected_rows: 1,
@@ -376,6 +377,7 @@ impl EngineManager {
         match engine {
             ActiveEngine::Postgres(pg) => pg.update_row(table_name, schema, pk_map, changes_map).await,
             ActiveEngine::Sqlite(sq) => sq.update_row(table_name, pk_map, changes_map),
+            ActiveEngine::NexusDb(nx) => nx.update_row(table_name, pk_map, changes_map),
             _ => Ok(MutationResult {
                 success: true,
                 affected_rows: 1,
@@ -404,6 +406,7 @@ impl EngineManager {
         match engine {
             ActiveEngine::Postgres(pg) => pg.delete_row(table_name, schema, pk_map).await,
             ActiveEngine::Sqlite(sq) => sq.delete_row(table_name, pk_map),
+            ActiveEngine::NexusDb(nx) => nx.delete_row(table_name, pk_map),
             _ => Ok(MutationResult {
                 success: true,
                 affected_rows: 1,
