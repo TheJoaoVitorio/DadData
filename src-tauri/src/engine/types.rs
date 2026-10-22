@@ -15,6 +15,7 @@ pub struct ConnectionConfig {
     pub ssl: Option<bool>,
     pub file_path: Option<String>,
     pub directory_path: Option<String>,
+    pub auth_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

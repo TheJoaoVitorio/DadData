@@ -17,7 +17,7 @@ import {
   ColumnInfo,
   ExportOptions
 } from '@shared/types/database';
-import { X, CheckCircle2, AlertCircle, Monitor, Plus, RefreshCw } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Monitor, Plus, RefreshCw, Pencil } from 'lucide-react';
 import { safeApi, isDesktop } from './services/api-client';
 
 export interface TabItem {
@@ -42,6 +42,7 @@ export const App: React.FC = () => {
   const [activeDatabase, setActiveDatabase] = useState<string>('');
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
 
   // Tabs - each tab encapsulates its own query, queryResult, columnsMeta, and loading state
   const [tabs, setTabs] = useState<TabItem[]>([
@@ -110,17 +111,36 @@ export const App: React.FC = () => {
 
   const initApp = async () => {
     try {
+      const saved = await safeApi.getSavedConnections();
+      if (saved && saved.length > 0) {
+        setSavedConnections(saved);
+      }
       const active = await safeApi.getActiveConnections();
       if (active && active.length > 0) {
-        setSavedConnections(active);
         await handleConnect(active[0]);
+      } else if (saved && saved.length > 0) {
+        await handleConnect(saved[0]);
       }
     } catch (err: any) {
       console.warn('Initial connection notice:', err);
     }
   };
 
+  const handleDeleteConnection = async (id: string) => {
+    try {
+      if (activeConnection?.id === id) {
+        await handleDisconnect();
+      }
+      await safeApi.deleteConnection(id);
+      setSavedConnections(prev => prev.filter(c => c.id !== id));
+      showToast('Conexão excluída com sucesso.');
+    } catch (err: any) {
+      showToast(`Erro ao excluir conexão: ${err.message}`, 'error');
+    }
+  };
+
   const FETCH_CHUNK_SIZE = 300;
+  const isFetchingMoreRef = useRef(false);
 
   // Helper to load table data and metadata into a specific tab (supports continuous on-demand infinite scroll fetching)
   const loadTableDataForTab = async (
@@ -195,22 +215,50 @@ export const App: React.FC = () => {
 
   const handleLoadMore = async () => {
     const currentTab = tabs.find(t => t.id === activeTabId);
-    if (!currentTab || !currentTab.tableName || !activeConnection || currentTab.isLoadingMore) return;
+    if (!currentTab || !currentTab.tableName || !activeConnection || currentTab.isLoadingMore || isFetchingMoreRef.current) return;
     if (currentTab.queryResult && !currentTab.queryResult.hasMore) return;
 
+    isFetchingMoreRef.current = true;
     const currentRowsCount = currentTab.queryResult?.rows?.length || 0;
 
-    await loadTableDataForTab(
-      currentTab.id,
-      currentTab.tableName,
-      activeConnection.id,
-      currentTab.schema,
-      {
-        limit: FETCH_CHUNK_SIZE,
-        offset: currentRowsCount,
-        append: true
+    try {
+      await loadTableDataForTab(
+        currentTab.id,
+        currentTab.tableName,
+        activeConnection.id,
+        currentTab.schema,
+        {
+          limit: FETCH_CHUNK_SIZE,
+          offset: currentRowsCount,
+          append: true
+        }
+      );
+    } finally {
+      isFetchingMoreRef.current = false;
+    }
+  };
+
+  const handleOpenNewConnection = () => {
+    setEditingConnection(null);
+    setIsConnectionDrawerOpen(true);
+  };
+
+  const handleEditConnection = (conn: ConnectionConfig) => {
+    setEditingConnection(conn);
+    setIsConnectionDrawerOpen(true);
+  };
+
+  const handleSaveEditConnection = async (updatedConfig: ConnectionConfig) => {
+    try {
+      await safeApi.saveConnection(updatedConfig);
+      setSavedConnections(prev => prev.map(c => c.id === updatedConfig.id ? updatedConfig : c));
+      showToast(`Conexão "${updatedConfig.name}" atualizada com sucesso!`);
+      if (activeConnection?.id === updatedConfig.id) {
+        await handleConnect(updatedConfig);
       }
-    );
+    } catch (err: any) {
+      showToast(`Erro ao atualizar conexão: ${err.message}`, 'error');
+    }
   };
 
   const handleConnect = async (config: ConnectionConfig) => {
@@ -226,18 +274,63 @@ export const App: React.FC = () => {
           const exists = prev.some(c => c.id === config.id);
           return exists ? prev : [...prev, config];
         });
+        await safeApi.saveConnection(config).catch(e => console.warn('Could not save connection:', e));
 
-        // For server-based engines, discover available databases
-        if (['postgres', 'mysql', 'mssql', 'mongodb'].includes(config.type)) {
+        const isServer = ['postgres', 'mysql', 'mssql', 'mongodb'].includes(config.type);
+        const isDbExplicitlySpecified = !!config.database && config.database.trim() !== '' && config.database !== 'master';
+
+        let serverDbs: string[] = [];
+        if (isServer) {
           try {
-            const dbs = await safeApi.listDatabases(config);
-            setServerDatabases(dbs || []);
+            serverDbs = await safeApi.listDatabases(config);
+            setServerDatabases(serverDbs || []);
           } catch (dbErr) {
             console.warn('Could not list databases on server:', dbErr);
             setServerDatabases([]);
           }
         } else {
           setServerDatabases([]);
+        }
+
+        // Rule: If connected to a server and NO specific database was selected:
+        // List all databases in our sidebar listing and main screen so the user can choose which database to explore!
+        if (isServer && !isDbExplicitlySpecified && serverDbs.length > 0) {
+          const dbEntities: TableInfo[] = serverDbs.map(dbName => ({
+            name: dbName,
+            type: 'database',
+            schema: undefined,
+            rowCount: undefined
+          }));
+          setTables(dbEntities);
+          setSelectedTable(null);
+          setActiveDatabase('');
+
+          setTabs([
+            {
+              id: 'server_databases',
+              title: `Servidor: ${config.name}`,
+              type: 'query',
+              query: '-- Bancos de dados disponíveis no servidor.\n-- Dê um clique em qualquer banco na barra lateral para explorar suas tabelas.',
+              queryResult: {
+                columns: ['BANCO_DE_DADOS', 'TIPO', 'STATUS'],
+                rows: serverDbs.map(d => ({
+                  BANCO_DE_DADOS: d,
+                  TIPO: 'Banco de Dados',
+                  STATUS: 'Disponível no Servidor'
+                })),
+                rowCount: serverDbs.length,
+                totalCount: serverDbs.length,
+                hasMore: false,
+                executionTimeMs: 0,
+                statementType: 'SELECT'
+              },
+              columnsMeta: [],
+              isLoading: false
+            }
+          ]);
+          setActiveTabId('server_databases');
+          showToast(`Conectado ao servidor! ${serverDbs.length} bancos de dados listados.`);
+          return;
         }
 
         // Load tables
@@ -375,8 +468,12 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSelectTable = async (tableName: string, schema?: string, connId?: string) => {
-    const targetConnId = connId || activeConnection?.id;
+  const handleSelectTable = async (tableName: string, schema?: string, connIdOrType?: string) => {
+    if (connIdOrType === 'database' || (activeConnection && serverDatabases.includes(tableName) && !tables.some(t => t.name === tableName && t.type !== 'database'))) {
+      await handleSwitchDatabase(tableName);
+      return;
+    }
+    const targetConnId = activeConnection?.id;
     if (!targetConnId) return;
 
     setSelectedTable(tableName);
@@ -727,6 +824,13 @@ export const App: React.FC = () => {
             >
               <RefreshCw className={`w-3 h-3 ${isLoading || currentTab?.isLoading ? 'animate-spin text-zinc-950' : ''}`} />
             </button>
+            <button
+              onClick={() => activeConnection && handleEditConnection(activeConnection)}
+              title="Editar Parâmetros da Conexão"
+              className="p-1 hover:bg-black/10 rounded-full transition-colors text-zinc-800 cursor-pointer"
+            >
+              <Pencil className="w-3 h-3 text-zinc-800" />
+            </button>
           </div>
         ) : (
           <span className="relative z-10 text-xs font-semibold text-zinc-800/80">Nenhum banco de dados conectado</span>
@@ -760,6 +864,7 @@ export const App: React.FC = () => {
           onSwitchConnection={handleConnect}
           onSwitchDatabase={handleSwitchDatabase}
           onDisconnect={handleDisconnect}
+          onDeleteConnection={handleDeleteConnection}
           onOpenNewQuery={handleOpenNewQuery}
           onOpenNewConnection={() => setIsConnectionDrawerOpen(true)}
           onRefreshSchema={handleRefreshSchema}

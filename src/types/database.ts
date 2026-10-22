@@ -28,6 +28,7 @@ export interface ConnectionConfig {
   user?: string;
   password?: string;
   ssl?: boolean;
+  authType?: 'sql' | 'windows' | string;
   version?: string; // e.g. "PostgreSQL 16", "MySQL 8.0", "Paradox 7"
   // File based (SQLite, DBF, Paradox, Access, HFSQL, NexusDB)
   filePath?: string;
@@ -61,7 +62,7 @@ export interface TableInfo {
   name: string;
   schema?: string;
   rowCount?: number;
-  type: 'table' | 'view' | 'collection' | 'file';
+  type: 'table' | 'view' | 'collection' | 'file' | 'database';
   columns?: ColumnInfo[];
 }
 
