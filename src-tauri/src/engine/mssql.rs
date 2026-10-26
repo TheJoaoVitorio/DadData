@@ -202,11 +202,26 @@ impl MssqlEngine {
 
     pub async fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
+        let stmt_type = crate::engine::sql_evaluator::get_statement_type(sql);
         let mut client = self.client.lock().await;
         let stream = client.simple_query(sql).await.map_err(|e| format!("Erro ao executar query no SQL Server: {}", e))?;
         let execution_time_ms = start.elapsed().as_millis();
 
         let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+
+        if rows.is_empty() && (stmt_type == "INSERT" || stmt_type == "UPDATE" || stmt_type == "DELETE") {
+            return Ok(QueryResult {
+                columns: vec!["STATUS".into()],
+                rows: vec![serde_json::json!({ "STATUS": format!("Comando {} executado com sucesso no SQL Server", stmt_type) })],
+                row_count: 1,
+                total_count: Some(1),
+                has_more: false,
+                execution_time_ms,
+                statement_type: Some(stmt_type.into()),
+                offset: None,
+                limit: None,
+            });
+        }
         let columns: Vec<String> = if let Some(first) = rows.first() {
             first.columns().iter().map(|c| c.name().to_string()).collect()
         } else {
@@ -230,7 +245,7 @@ impl MssqlEngine {
             total_count: Some(count as i64),
             has_more: false,
             execution_time_ms,
-            statement_type: Some("SELECT".into()),
+            statement_type: Some(stmt_type.into()),
             offset: None,
             limit: None,
         })

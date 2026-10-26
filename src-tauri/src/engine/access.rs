@@ -243,13 +243,13 @@ while ($true) {
 
                 Send-JsonResult @{
                     success = $true
-                    columns = @()
-                    rows = @()
+                    columns = @("AFFECTED_ROWS")
+                    rows = @(@{ AFFECTED_ROWS = $affected })
                     row_count = $affected
                     total_count = $affected
                     has_more = $false
                     execution_time_ms = [int]$sw.ElapsedMilliseconds
-                    statement_type = "DML"
+                    statement_type = if (@("INSERT","UPDATE","DELETE","CREATE","DROP","ALTER") -contains (($trimmed -split '\s+')[0].ToUpper())) { ($trimmed -split '\s+')[0].ToUpper() } else { "DML" }
                     affected_rows = $affected
                 }
             }

@@ -8,7 +8,8 @@ import {
   X,
   Search,
   Clock,
-  ArrowUpDown
+  ArrowUpDown,
+  AlertCircle
 } from 'lucide-react';
 import { QueryResult, ColumnInfo } from '@shared/types/database';
 import { NumberTicker } from '../magicui/number-ticker';
@@ -102,6 +103,57 @@ export const DataGrid: React.FC<DataGridProps> = ({
           <span>Carregando dados da tabela...</span>
         </AnimatedGradientText>
         <p className="text-[11px] text-zinc-400 mt-0.5">Executando consulta e indexando colunas</p>
+      </div>
+    );
+  }
+
+  // DML / Non-SELECT statement execution result view
+  if (
+    queryResult &&
+    ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER'].includes(queryResult.statementType || '') &&
+    (queryResult.columns.length === 0 ||
+      (queryResult.columns.length === 1 &&
+        (queryResult.columns[0] === 'AFFECTED_ROWS' || queryResult.columns[0] === 'STATUS')))
+  ) {
+    const isError = queryResult.rows[0]?.STATUS?.toLowerCase().includes('erro');
+    return (
+      <div className="relative flex-1 flex flex-col items-center justify-center p-6 select-none overflow-hidden">
+        <DotPattern className="opacity-25" />
+        <MagicCard
+          gradientColor={isError ? '#F43F5E' : '#10B981'}
+          gradientSize={260}
+          className="max-w-md p-8 flex flex-col items-center text-center shadow-lg border-zinc-200/80 rounded-3xl bg-white/95 backdrop-blur-xs"
+        >
+          <div
+            className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 shadow-xs border ${
+              isError
+                ? 'bg-rose-100 text-rose-600 border-rose-300'
+                : 'bg-emerald-100 text-emerald-600 border-emerald-300'
+            }`}
+          >
+            {isError ? (
+              <AlertCircle className="w-7 h-7 stroke-[2]" />
+            ) : (
+              <Check className="w-7 h-7 stroke-[2.5]" />
+            )}
+          </div>
+          <h3 className="text-base font-bold text-zinc-900 mb-1.5">
+            Comando {queryResult.statementType} executado com sucesso!
+          </h3>
+          <p className="text-xs text-zinc-600 leading-relaxed mb-4">
+            {queryResult.rows[0]?.STATUS ||
+              `A operação ${queryResult.statementType} foi processada com sucesso no banco de dados.`}
+          </p>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+              Linhas afetadas: {queryResult.rowCount}
+            </span>
+            <span className="text-xs font-mono text-zinc-500 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-amber-500" />
+              {queryResult.executionTimeMs} ms
+            </span>
+          </div>
+        </MagicCard>
       </div>
     );
   }

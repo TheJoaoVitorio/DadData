@@ -949,6 +949,8 @@ export const App: React.FC = () => {
                   isCollapsed={isEditorCollapsed}
                   onToggleCollapse={() => setIsEditorCollapsed(!isEditorCollapsed)}
                   height={isEditorCollapsed ? undefined : editorHeight}
+                  dbType={activeConnection?.type}
+                  columnsMeta={currentTab?.columnsMeta || []}
                 />
 
                 {/* Resizable Splitter */}

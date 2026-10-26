@@ -165,6 +165,28 @@ impl PostgresEngine {
     pub async fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
         let client = self.pool.get().await.map_err(|e| e.to_string())?;
+        let stmt_type = crate::engine::sql_evaluator::get_statement_type(sql);
+        let upper = sql.to_ascii_uppercase();
+
+        let is_mutation = stmt_type == "INSERT" || stmt_type == "UPDATE" || stmt_type == "DELETE";
+        let has_returning = upper.contains(" RETURNING ");
+
+        if is_mutation && !has_returning {
+            let affected = client.execute(sql, &[]).await.map_err(|e| e.to_string())?;
+            let execution_time_ms = start.elapsed().as_millis();
+            return Ok(QueryResult {
+                columns: vec!["AFFECTED_ROWS".into()],
+                rows: vec![serde_json::json!({ "AFFECTED_ROWS": affected })],
+                row_count: affected as usize,
+                total_count: Some(affected as i64),
+                has_more: false,
+                execution_time_ms,
+                statement_type: Some(stmt_type.into()),
+                offset: None,
+                limit: None,
+            });
+        }
+
         let rows = client.query(sql, &[]).await.map_err(|e| e.to_string())?;
         let execution_time_ms = start.elapsed().as_millis();
 
@@ -192,7 +214,7 @@ impl PostgresEngine {
             total_count: None,
             has_more: false,
             execution_time_ms,
-            statement_type: Some("SELECT".into()),
+            statement_type: Some(stmt_type.into()),
             offset: None,
             limit: None,
         })

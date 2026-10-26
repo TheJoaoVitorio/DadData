@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::sync::Mutex;
 use std::time::Instant;
 use rsfbclient::{
-    builder_native, builder_pure_rust, Charset, Queryable, Row, SimpleConnection, SqlType,
+    builder_native, builder_pure_rust, Charset, Execute, Queryable, Row, SimpleConnection, SqlType,
 };
 use serde_json::{json, Map, Value};
 use crate::engine::types::*;
@@ -271,6 +271,24 @@ impl FirebirdEngine {
     pub fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
         let mut conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let stmt_type = crate::engine::sql_evaluator::get_statement_type(sql);
+
+        if stmt_type == "INSERT" || stmt_type == "UPDATE" || stmt_type == "DELETE" || stmt_type == "CREATE" || stmt_type == "DROP" || stmt_type == "ALTER" {
+            conn.execute(sql, ()).map_err(|e| format!("Erro ao executar {} no Firebird: {}", stmt_type, e))?;
+            let execution_time_ms = start.elapsed().as_millis();
+            return Ok(QueryResult {
+                columns: vec!["STATUS".into()],
+                rows: vec![serde_json::json!({ "STATUS": format!("Comando {} executado com sucesso no Firebird", stmt_type) })],
+                row_count: 1,
+                total_count: Some(1),
+                has_more: false,
+                execution_time_ms,
+                statement_type: Some(stmt_type.into()),
+                offset: None,
+                limit: None,
+            });
+        }
+
         let rows: Vec<Row> = conn
             .query(sql, ())
             .map_err(|e| format!("Erro ao executar query Firebird: {}", e))?;
@@ -298,7 +316,7 @@ impl FirebirdEngine {
             total_count: Some(count as i64),
             has_more: false,
             execution_time_ms,
-            statement_type: Some("SELECT".into()),
+            statement_type: Some(stmt_type.into()),
             offset: None,
             limit: None,
         })

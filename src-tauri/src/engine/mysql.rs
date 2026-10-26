@@ -177,6 +177,25 @@ impl MysqlEngine {
     pub async fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
         let mut conn = self.pool.get_conn().await.map_err(|e| e.to_string())?;
+        let stmt_type = crate::engine::sql_evaluator::get_statement_type(sql);
+
+        if stmt_type == "INSERT" || stmt_type == "UPDATE" || stmt_type == "DELETE" {
+            conn.query_drop(sql).await.map_err(|e| e.to_string())?;
+            let affected = conn.affected_rows();
+            let execution_time_ms = start.elapsed().as_millis();
+            return Ok(QueryResult {
+                columns: vec!["AFFECTED_ROWS".into()],
+                rows: vec![serde_json::json!({ "AFFECTED_ROWS": affected })],
+                row_count: affected as usize,
+                total_count: Some(affected as i64),
+                has_more: false,
+                execution_time_ms,
+                statement_type: Some(stmt_type.into()),
+                offset: None,
+                limit: None,
+            });
+        }
+
         let rows: Vec<mysql_async::Row> = conn.query(sql).await.map_err(|e| e.to_string())?;
         let execution_time_ms = start.elapsed().as_millis();
 
@@ -203,7 +222,7 @@ impl MysqlEngine {
             total_count: Some(count as i64),
             has_more: false,
             execution_time_ms,
-            statement_type: Some("SELECT".into()),
+            statement_type: Some(stmt_type.into()),
             offset: None,
             limit: None,
         })

@@ -85,7 +85,24 @@ impl SqliteEngine {
     pub fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let stmt_type = crate::engine::sql_evaluator::get_statement_type(sql);
         let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+
+        if stmt.column_count() == 0 {
+            let affected = stmt.execute([]).map_err(|e| e.to_string())?;
+            let execution_time_ms = start.elapsed().as_millis();
+            return Ok(QueryResult {
+                columns: vec!["AFFECTED_ROWS".into()],
+                rows: vec![serde_json::json!({ "AFFECTED_ROWS": affected })],
+                row_count: affected,
+                total_count: Some(affected as i64),
+                has_more: false,
+                execution_time_ms,
+                statement_type: Some(stmt_type.into()),
+                offset: None,
+                limit: None,
+            });
+        }
 
         let col_names: Vec<String> = stmt.column_names().into_iter().map(|s| s.to_string()).collect();
         let mut rows = Vec::new();
@@ -124,7 +141,7 @@ impl SqliteEngine {
             total_count: None,
             has_more: false,
             execution_time_ms,
-            statement_type: Some("SELECT".into()),
+            statement_type: Some(stmt_type.into()),
             offset: None,
             limit: None,
         })
@@ -174,6 +191,7 @@ impl SqliteEngine {
         }
 
         let row_count = rows.len();
+        let stmt_type = "SELECT";
         let has_more = match total_count {
             Some(t) => (offset + row_count) < t as usize,
             None => row_count == limit,
@@ -187,7 +205,7 @@ impl SqliteEngine {
             total_count,
             has_more,
             execution_time_ms,
-            statement_type: Some("SELECT".into()),
+            statement_type: Some(stmt_type.into()),
             offset: Some(offset),
             limit: Some(limit),
         })

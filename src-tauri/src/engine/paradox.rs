@@ -361,35 +361,32 @@ impl ParadoxEngine {
 
     pub fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
-        let tables = self.tables.lock().map_err(|e| e.to_string())?;
+        let mut tables = self.tables.lock().map_err(|e| e.to_string())?;
 
-        let clean = sql.trim();
-        let target_name = clean
-            .split_whitespace()
-            .skip_while(|w| !w.eq_ignore_ascii_case("FROM"))
-            .nth(1)
-            .map(|s| s.trim_matches(|c| c == '"' || c == '\'' || c == '`' || c == '[' || c == ']').to_string());
-
-        let tbl = match target_name {
-            Some(ref name) => tables.get(name).or_else(|| tables.values().next()),
-            None => tables.values().next(),
+        let target_name = crate::engine::sql_evaluator::extract_target_table(sql);
+        let tbl_key = match target_name {
+            Some(ref name) => {
+                if tables.contains_key(name) {
+                    Some(name.clone())
+                } else {
+                    tables.keys().find(|k| k.eq_ignore_ascii_case(name)).cloned()
+                        .or_else(|| tables.keys().next().cloned())
+                }
+            }
+            None => tables.keys().next().cloned(),
         }.ok_or_else(|| "Nenhuma tabela Paradox disponível".to_string())?;
 
+        let tbl = tables.get_mut(&tbl_key).unwrap();
         let columns: Vec<String> = tbl.fields.iter().map(|f| f.name.clone()).collect();
-        let rows: Vec<Value> = tbl.rows.iter().map(|m| Value::Object(m.clone())).collect();
-        let count = rows.len();
+        let stmt_type = crate::engine::sql_evaluator::get_statement_type(sql);
 
-        Ok(QueryResult {
-            columns,
-            rows,
-            row_count: count,
-            total_count: Some(count as i64),
-            has_more: false,
-            execution_time_ms: start.elapsed().as_millis(),
-            statement_type: Some("SELECT".into()),
-            offset: None,
-            limit: None,
-        })
+        match stmt_type {
+            "SELECT" => crate::engine::sql_evaluator::execute_select(&columns, &tbl.rows, sql, start),
+            "INSERT" => crate::engine::sql_evaluator::execute_insert(&columns, &mut tbl.rows, sql, start),
+            "UPDATE" => crate::engine::sql_evaluator::execute_update(&mut tbl.rows, sql, start),
+            "DELETE" => crate::engine::sql_evaluator::execute_delete(&mut tbl.rows, sql, start),
+            _ => crate::engine::sql_evaluator::execute_select(&columns, &tbl.rows, sql, start),
+        }
     }
 
     pub fn get_table_data(&self, table_name: &str, limit: usize, offset: usize) -> Result<QueryResult, String> {

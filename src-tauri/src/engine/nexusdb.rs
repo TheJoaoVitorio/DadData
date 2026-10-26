@@ -592,21 +592,16 @@ impl NexusDbEngine {
         tbl.ensure_rows_loaded();
 
         let columns: Vec<String> = tbl.columns.iter().map(|c| c.name.clone()).collect();
-        let raw_rows = tbl.rows.as_ref().unwrap();
-        let rows: Vec<Value> = raw_rows.iter().map(|m| Value::Object(m.clone())).collect();
-        let count = rows.len();
+        let stmt_type = crate::engine::sql_evaluator::get_statement_type(sql);
+        let table_rows = tbl.rows.as_mut().unwrap();
 
-        Ok(QueryResult {
-            columns,
-            rows,
-            row_count: count,
-            total_count: Some(count as i64),
-            has_more: false,
-            execution_time_ms: start.elapsed().as_millis(),
-            statement_type: Some("SELECT".into()),
-            offset: None,
-            limit: None,
-        })
+        match stmt_type {
+            "SELECT" => crate::engine::sql_evaluator::execute_select(&columns, table_rows, sql, start),
+            "INSERT" => crate::engine::sql_evaluator::execute_insert(&columns, table_rows, sql, start),
+            "UPDATE" => crate::engine::sql_evaluator::execute_update(table_rows, sql, start),
+            "DELETE" => crate::engine::sql_evaluator::execute_delete(table_rows, sql, start),
+            _ => crate::engine::sql_evaluator::execute_select(&columns, table_rows, sql, start),
+        }
     }
 
     pub fn get_table_data(&self, table_name: &str, limit: usize, offset: usize) -> Result<QueryResult, String> {

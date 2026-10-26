@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Instant;
 use serde_json::{Map, Value};
 use crate::engine::types::*;
@@ -18,7 +19,7 @@ pub struct DbfEngine {
     pub file_path: PathBuf,
     pub db_name: String,
     pub fields: Vec<DbfField>,
-    pub rows: Vec<Map<String, Value>>,
+    pub rows: Mutex<Vec<Map<String, Value>>>,
 }
 
 impl DbfEngine {
@@ -153,7 +154,7 @@ impl DbfEngine {
             file_path: path,
             db_name,
             fields,
-            rows,
+            rows: Mutex::new(rows),
         })
     }
 
@@ -165,7 +166,7 @@ impl DbfEngine {
         tables.push(TableInfo {
             name: main_name,
             schema: Some("dbf".into()),
-            row_count: Some(self.rows.len() as i64),
+            row_count: self.rows.lock().map(|r| r.len() as i64).ok(),
             table_type: "table".into(),
         });
 
@@ -206,30 +207,27 @@ impl DbfEngine {
         }).collect())
     }
 
-    pub fn execute_query(&self, _sql: &str) -> Result<QueryResult, String> {
+    pub fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         let start = Instant::now();
         let columns: Vec<String> = self.fields.iter().map(|f| f.name.clone()).collect();
-        let rows: Vec<Value> = self.rows.iter().map(|m| Value::Object(m.clone())).collect();
-        let count = rows.len();
+        let mut rows = self.rows.lock().map_err(|e| e.to_string())?;
+        let stmt_type = crate::engine::sql_evaluator::get_statement_type(sql);
 
-        Ok(QueryResult {
-            columns,
-            rows,
-            row_count: count,
-            total_count: Some(count as i64),
-            has_more: false,
-            execution_time_ms: start.elapsed().as_millis(),
-            statement_type: Some("SELECT".into()),
-            offset: None,
-            limit: None,
-        })
+        match stmt_type {
+            "SELECT" => crate::engine::sql_evaluator::execute_select(&columns, &rows, sql, start),
+            "INSERT" => crate::engine::sql_evaluator::execute_insert(&columns, &mut rows, sql, start),
+            "UPDATE" => crate::engine::sql_evaluator::execute_update(&mut rows, sql, start),
+            "DELETE" => crate::engine::sql_evaluator::execute_delete(&mut rows, sql, start),
+            _ => crate::engine::sql_evaluator::execute_select(&columns, &rows, sql, start),
+        }
     }
 
     pub fn get_table_data(&self, _table_name: &str, limit: usize, offset: usize) -> Result<QueryResult, String> {
         let start = Instant::now();
         let columns: Vec<String> = self.fields.iter().map(|f| f.name.clone()).collect();
-        let total = self.rows.len();
-        let sliced: Vec<Value> = self.rows.iter().skip(offset).take(limit).map(|m| Value::Object(m.clone())).collect();
+        let rows = self.rows.lock().map_err(|e| e.to_string())?;
+        let total = rows.len();
+        let sliced: Vec<Value> = rows.iter().skip(offset).take(limit).map(|m| Value::Object(m.clone())).collect();
         let count = sliced.len();
         let has_more = (offset + count) < total;
 
