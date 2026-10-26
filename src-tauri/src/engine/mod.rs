@@ -171,7 +171,7 @@ impl EngineManager {
                     .as_deref()
                     .ok_or_else(|| "Caminho do arquivo Access (.MDB/.ACCDB) não informado".to_string())?;
 
-                let engine = AccessEngine::open(path)?;
+                let engine = AccessEngine::open(path, config.password.as_deref())?;
                 let db_name = engine.db_name.clone();
                 let mut map = self.engines.write().await;
                 map.insert(conn_id.clone(), ActiveEngine::Access(engine));
@@ -346,6 +346,7 @@ impl EngineManager {
             ActiveEngine::Sqlite(sq) => sq.insert_row(table_name, map_data),
             ActiveEngine::NexusDb(nx) => nx.insert_row(table_name, map_data),
             ActiveEngine::Paradox(px) => px.insert_row(table_name, map_data),
+            ActiveEngine::Access(ac) => ac.insert_row(table_name, map_data),
             _ => Ok(MutationResult {
                 success: true,
                 affected_rows: 1,
@@ -380,6 +381,7 @@ impl EngineManager {
             ActiveEngine::Sqlite(sq) => sq.update_row(table_name, pk_map, changes_map),
             ActiveEngine::NexusDb(nx) => nx.update_row(table_name, pk_map, changes_map),
             ActiveEngine::Paradox(px) => px.update_row(table_name, pk_map, changes_map),
+            ActiveEngine::Access(ac) => ac.update_row(table_name, pk_map, changes_map),
             _ => Ok(MutationResult {
                 success: true,
                 affected_rows: 1,
@@ -410,6 +412,7 @@ impl EngineManager {
             ActiveEngine::Sqlite(sq) => sq.delete_row(table_name, pk_map),
             ActiveEngine::NexusDb(nx) => nx.delete_row(table_name, pk_map),
             ActiveEngine::Paradox(px) => px.delete_row(table_name, pk_map),
+            ActiveEngine::Access(ac) => ac.delete_row(table_name, pk_map),
             _ => Ok(MutationResult {
                 success: true,
                 affected_rows: 1,
