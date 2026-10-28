@@ -1,6 +1,9 @@
 pub mod types;
 pub mod export;
 pub mod sql_evaluator;
+pub mod service_detector;
+pub mod provisioner;
+pub mod backup;
 pub mod sqlite;
 pub mod postgres;
 pub mod mysql;
@@ -38,17 +41,31 @@ pub enum ActiveEngine {
 
 pub struct EngineManager {
     engines: RwLock<HashMap<String, ActiveEngine>>,
+    configs: RwLock<HashMap<String, ConnectionConfig>>,
 }
 
 impl EngineManager {
     pub fn new() -> Self {
         Self {
             engines: RwLock::new(HashMap::new()),
+            configs: RwLock::new(HashMap::new()),
         }
+    }
+
+    pub async fn get_config(&self, connection_id: &str) -> Option<ConnectionConfig> {
+        let configs = self.configs.read().await;
+        configs.get(connection_id).cloned()
     }
 
     pub async fn connect(&self, config: ConnectionConfig) -> Result<ConnectionResult, String> {
         let conn_id = config.id.clone();
+        
+        // Save config
+        {
+            let mut configs = self.configs.write().await;
+            configs.insert(conn_id.clone(), config.clone());
+        }
+
         match config.db_type.to_lowercase().as_str() {
             "postgres" | "postgresql" => {
                 let engine = PostgresEngine::connect(&config).await?;
@@ -215,6 +232,8 @@ impl EngineManager {
     pub async fn disconnect(&self, connection_id: &str) -> Result<(), String> {
         let mut map = self.engines.write().await;
         map.remove(connection_id);
+        let mut configs = self.configs.write().await;
+        configs.remove(connection_id);
         Ok(())
     }
 
@@ -421,5 +440,166 @@ impl EngineManager {
                 error: None,
             }),
         }
+    }
+
+    /// Builds a hierarchical DBeaver-style database tree
+    pub async fn get_schema_tree(
+        &self,
+        connection_id: &str,
+        _schema_filter: Option<&str>,
+    ) -> Result<Vec<DatabaseTreeNode>, String> {
+        let tables = self.list_tables(connection_id).await?;
+        let config = self.get_config(connection_id).await;
+
+        let db_name = config
+            .as_ref()
+            .and_then(|c| c.database.clone())
+            .or_else(|| config.as_ref().map(|c| c.name.clone()))
+            .unwrap_or_else(|| "Database".to_string());
+
+        // Group by schema
+        let mut schemas_map: HashMap<String, Vec<TableInfo>> = HashMap::new();
+        for table in tables {
+            let s = table.schema.clone().unwrap_or_else(|| "public".to_string());
+            schemas_map.entry(s).or_default().push(table);
+        }
+
+        let mut schema_nodes = Vec::new();
+
+        for (schema_name, schema_tables) in schemas_map {
+            let mut table_nodes = Vec::new();
+            let mut view_nodes = Vec::new();
+
+            for tbl in schema_tables {
+                let is_view = tbl.table_type.to_lowercase() == "view";
+                let node = DatabaseTreeNode {
+                    id: format!("{}:{}:{}", schema_name, tbl.table_type, tbl.name),
+                    label: tbl.name.clone(),
+                    node_type: if is_view { "view".to_string() } else { "table".to_string() },
+                    schema: Some(schema_name.clone()),
+                    row_count: tbl.row_count,
+                    children: Vec::new(),
+                    metadata: None,
+                };
+
+                if is_view {
+                    view_nodes.push(node);
+                } else {
+                    table_nodes.push(node);
+                }
+            }
+
+            let mut schema_children = Vec::new();
+
+            // Tables folder
+            schema_children.push(DatabaseTreeNode {
+                id: format!("{}:folder:tables", schema_name),
+                label: format!("Tabelas ({})", table_nodes.len()),
+                node_type: "table_folder".to_string(),
+                schema: Some(schema_name.clone()),
+                row_count: Some(table_nodes.len() as i64),
+                children: table_nodes,
+                metadata: None,
+            });
+
+            // Views folder
+            if !view_nodes.is_empty() {
+                schema_children.push(DatabaseTreeNode {
+                    id: format!("{}:folder:views", schema_name),
+                    label: format!("Views ({})", view_nodes.len()),
+                    node_type: "view_folder".to_string(),
+                    schema: Some(schema_name.clone()),
+                    row_count: Some(view_nodes.len() as i64),
+                    children: view_nodes,
+                    metadata: None,
+                });
+            }
+
+            // Procedures folder
+            schema_children.push(DatabaseTreeNode {
+                id: format!("{}:folder:procedures", schema_name),
+                label: "Procedimentos & Funções".to_string(),
+                node_type: "proc_folder".to_string(),
+                schema: Some(schema_name.clone()),
+                row_count: Some(0),
+                children: Vec::new(),
+                metadata: None,
+            });
+
+            // Triggers folder
+            schema_children.push(DatabaseTreeNode {
+                id: format!("{}:folder:triggers", schema_name),
+                label: "Gatilhos (Triggers)".to_string(),
+                node_type: "trigger_folder".to_string(),
+                schema: Some(schema_name.clone()),
+                row_count: Some(0),
+                children: Vec::new(),
+                metadata: None,
+            });
+
+            schema_nodes.push(DatabaseTreeNode {
+                id: format!("schema:{}", schema_name),
+                label: schema_name.clone(),
+                node_type: "schema".to_string(),
+                schema: Some(schema_name),
+                row_count: None,
+                children: schema_children,
+                metadata: None,
+            });
+        }
+
+        // Wrap under root database node
+        let root = DatabaseTreeNode {
+            id: format!("db:{}", db_name),
+            label: db_name,
+            node_type: "database".to_string(),
+            schema: None,
+            row_count: None,
+            children: schema_nodes,
+            metadata: None,
+        };
+
+        Ok(vec![root])
+    }
+
+    /// Reconstructs DDL CREATE TABLE / VIEW statement
+    pub async fn get_object_ddl(
+        &self,
+        connection_id: &str,
+        object_type: &str,
+        object_name: &str,
+        schema: Option<&str>,
+    ) -> Result<DdlResult, String> {
+        let cols = self.describe_table(connection_id, object_name, schema).await?;
+
+        let mut ddl = format!("-- =============================================\n-- DDL Gerado pelo DadData SGBD Engine\n-- Objeto: {}\n-- Tipo:   {}\n-- =============================================\n\n", object_name, object_type.to_uppercase());
+        ddl.push_str(&format!("CREATE TABLE {} (\n", object_name));
+
+        let mut lines = Vec::new();
+        let mut pks = Vec::new();
+
+        for col in cols {
+            let mut line = format!("    {} {}", col.name, col.col_type);
+            if !col.nullable {
+                line.push_str(" NOT NULL");
+            }
+            if col.is_primary_key {
+                pks.push(col.name.clone());
+            }
+            lines.push(line);
+        }
+
+        if !pks.is_empty() {
+            lines.push(format!("    CONSTRAINT PK_{} PRIMARY KEY ({})", object_name, pks.join(", ")));
+        }
+
+        ddl.push_str(&lines.join(",\n"));
+        ddl.push_str("\n);\n");
+
+        Ok(DdlResult {
+            object_name: object_name.to_string(),
+            object_type: object_type.to_string(),
+            ddl,
+        })
     }
 }

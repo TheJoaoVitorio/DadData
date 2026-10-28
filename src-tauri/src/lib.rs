@@ -29,6 +29,14 @@ pub fn run() {
             commands::storage_get_connections,
             commands::storage_save_connection,
             commands::storage_delete_connection,
+            // SGBD & Discovery / Backup
+            commands::sys_detect_services,
+            commands::sys_get_portable_tools_status,
+            commands::sys_download_portable_tool,
+            commands::db_get_schema_tree,
+            commands::db_get_object_ddl,
+            commands::db_start_backup,
+            commands::db_start_restore,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

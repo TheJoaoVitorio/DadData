@@ -1,8 +1,11 @@
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State};
 use crate::engine::EngineManager;
 use crate::engine::types::*;
 use crate::engine::export::*;
+use crate::engine::service_detector::ServiceDetector;
+use crate::engine::provisioner::Provisioner;
+use crate::engine::backup::BackupManager;
 use crate::storage::LocalStorage;
 
 #[tauri::command]
@@ -185,4 +188,69 @@ pub async fn export_data(
         file_size_bytes,
         message: format!("Exportados {} registros com sucesso!", count),
     })
+}
+
+// --- SGBD & System Discovery Commands ---
+
+#[tauri::command]
+pub async fn sys_detect_services() -> Result<Vec<DetectedService>, String> {
+    Ok(ServiceDetector::detect_all())
+}
+
+#[tauri::command]
+pub async fn sys_get_portable_tools_status() -> Result<Vec<PortableToolStatus>, String> {
+    Ok(Provisioner::list_tools())
+}
+
+#[tauri::command]
+pub async fn sys_download_portable_tool(tool_id: String) -> Result<String, String> {
+    Provisioner::download_tool(&tool_id).await
+}
+
+#[tauri::command]
+pub async fn db_get_schema_tree(
+    state: State<'_, Arc<EngineManager>>,
+    connection_id: String,
+    schema_filter: Option<String>,
+) -> Result<Vec<DatabaseTreeNode>, String> {
+    state.get_schema_tree(&connection_id, schema_filter.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn db_get_object_ddl(
+    state: State<'_, Arc<EngineManager>>,
+    connection_id: String,
+    object_type: String,
+    object_name: String,
+    schema: Option<String>,
+) -> Result<DdlResult, String> {
+    state.get_object_ddl(&connection_id, &object_type, &object_name, schema.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn db_start_backup(
+    app_handle: AppHandle,
+    state: State<'_, Arc<EngineManager>>,
+    options: BackupOptions,
+) -> Result<String, String> {
+    let config = state
+        .get_config(&options.connection_id)
+        .await
+        .ok_or_else(|| "Conexão ativa não encontrada para executar o backup.".to_string())?;
+
+    BackupManager::backup(&app_handle, options, config).await
+}
+
+#[tauri::command]
+pub async fn db_start_restore(
+    app_handle: AppHandle,
+    state: State<'_, Arc<EngineManager>>,
+    options: RestoreOptions,
+) -> Result<String, String> {
+    let config = state
+        .get_config(&options.connection_id)
+        .await
+        .ok_or_else(|| "Conexão ativa não encontrada para executar a restauração.".to_string())?;
+
+    BackupManager::restore(&app_handle, options, config).await
 }

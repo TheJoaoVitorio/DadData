@@ -22,7 +22,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
 deadpool-postgres = "0.14"
 mysql_async = { version = "0.35", default-features = false, features = ["default-rustls", "chrono"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 chrono = { version = "0.4", features = ["serde"] }
 csv = "1"
 rust_xlsxwriter = "0.8"
