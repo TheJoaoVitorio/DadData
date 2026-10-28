@@ -139,3 +139,21 @@ impl Provisioner {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_tools_contains_engines() {
+        let tools = Provisioner::list_tools();
+        assert!(!tools.is_empty());
+        let sqlite = tools.iter().find(|t| t.id == "sqlite_engine");
+        assert!(sqlite.is_some());
+        assert!(sqlite.unwrap().is_installed);
+
+        let pg = tools.iter().find(|t| t.id == "postgres_tools");
+        assert!(pg.is_some());
+        assert!(pg.unwrap().download_url.is_some());
+    }
+}

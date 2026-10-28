@@ -110,7 +110,18 @@ export const App: React.FC = () => {
     ddl: ''
   });
 
+  const formatErr = (err: any): string => {
+    if (!err) return 'Erro desconhecido';
+    if (typeof err === 'string') return err;
+    if (formatErr(err)) return formatErr(err);
+    return String(err);
+  };
+
   const handleOpenBackup = (dbName?: string, tableName?: string) => {
+    if (!activeConnection) {
+      showToast('Selecione ou conecte-se a um banco de dados primeiro.', 'error');
+      return;
+    }
     setBackupModalMode('backup');
     setBackupDatabaseTarget(dbName || activeDatabase || activeConnection?.database || '');
     setBackupTableTarget(tableName);
@@ -118,6 +129,10 @@ export const App: React.FC = () => {
   };
 
   const handleOpenRestore = (dbName?: string) => {
+    if (!activeConnection) {
+      showToast('Selecione ou conecte-se a um banco de dados primeiro.', 'error');
+      return;
+    }
     setBackupModalMode('restore');
     setBackupDatabaseTarget(dbName || activeDatabase || activeConnection?.database || '');
     setIsBackupModalOpen(true);
@@ -177,7 +192,7 @@ export const App: React.FC = () => {
       setSavedConnections(prev => prev.filter(c => c.id !== id));
       showToast('Conexão excluída com sucesso.');
     } catch (err: any) {
-      showToast(`Erro ao excluir conexão: ${err.message}`, 'error');
+      showToast(`Erro ao excluir conexão: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -251,7 +266,7 @@ export const App: React.FC = () => {
             : t
         )
       );
-      showToast(`Erro ao carregar dados de ${tableName}: ${err.message}`, 'error');
+      showToast(`Erro ao carregar dados de ${tableName}: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -299,7 +314,7 @@ export const App: React.FC = () => {
         await handleConnect(updatedConfig);
       }
     } catch (err: any) {
-      showToast(`Erro ao atualizar conexão: ${err.message}`, 'error');
+      showToast(`Erro ao atualizar conexão: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -437,7 +452,7 @@ export const App: React.FC = () => {
         showToast(`Conectado a ${config.name}! (${tableList.length} tabelas carregadas)`);
       }
     } catch (err: any) {
-      showToast(`Erro na conexão: ${err.message}`, 'error');
+      showToast(`Erro na conexão: ${formatErr(err)}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -457,7 +472,7 @@ export const App: React.FC = () => {
       await handleConnect(newConfig);
       showToast(`Banco de dados alternado para "${newDbName}"!`);
     } catch (err: any) {
-      showToast(`Erro ao alternar para banco ${newDbName}: ${err.message}`, 'error');
+      showToast(`Erro ao alternar para banco ${newDbName}: ${formatErr(err)}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -487,7 +502,7 @@ export const App: React.FC = () => {
       setActiveTabId('query_1');
       showToast('Desconectado do banco.');
     } catch (err: any) {
-      showToast(`Erro ao desconectar: ${err.message}`, 'error');
+      showToast(`Erro ao desconectar: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -504,7 +519,7 @@ export const App: React.FC = () => {
       }
       showToast(`Esquema atualizado: ${tableList.length} tabelas carregadas.`);
     } catch (err: any) {
-      showToast(`Erro ao atualizar: ${err.message}`, 'error');
+      showToast(`Erro ao atualizar: ${formatErr(err)}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -676,7 +691,7 @@ export const App: React.FC = () => {
       setTabs(prev =>
         prev.map(t => (t.id === targetTabId ? { ...t, isLoading: false } : t))
       );
-      showToast(`Falha na query: ${err.message}`, 'error');
+      showToast(`Falha na query: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -696,7 +711,7 @@ export const App: React.FC = () => {
         showToast(`Erro ao atualizar: ${res.error || 'Falha'}`, 'error');
       }
     } catch (err: any) {
-      showToast(`Erro ao atualizar: ${err.message}`, 'error');
+      showToast(`Erro ao atualizar: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -716,7 +731,7 @@ export const App: React.FC = () => {
         showToast(`Erro ao excluir: ${res.error || 'Falha'}`, 'error');
       }
     } catch (err: any) {
-      showToast(`Erro ao excluir: ${err.message}`, 'error');
+      showToast(`Erro ao excluir: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -736,7 +751,7 @@ export const App: React.FC = () => {
         showToast(`Erro ao inserir: ${res.error || 'Falha'}`, 'error');
       }
     } catch (err: any) {
-      showToast(`Erro ao inserir: ${err.message}`, 'error');
+      showToast(`Erro ao inserir: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -789,7 +804,7 @@ export const App: React.FC = () => {
         showToast(`Falha na exportação: ${res.message || 'Erro'}`, 'error');
       }
     } catch (err: any) {
-      showToast(`Erro na exportação: ${err.message}`, 'error');
+      showToast(`Erro na exportação: ${formatErr(err)}`, 'error');
     }
   };
 

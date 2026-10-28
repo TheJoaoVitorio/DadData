@@ -283,3 +283,28 @@ impl ServiceDetector {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_all_returns_services() {
+        let services = ServiceDetector::detect_all();
+        assert!(!services.is_empty());
+        let sqlite = services.iter().find(|s| s.id == "sqlite");
+        assert!(sqlite.is_some());
+        assert_eq!(sqlite.unwrap().status, "running");
+        assert!(sqlite.unwrap().is_portable);
+    }
+
+    #[test]
+    fn test_detect_postgres_and_mysql_structure() {
+        let pg = ServiceDetector::detect_postgres();
+        assert_eq!(pg.id, "postgres");
+        assert_eq!(pg.name, "PostgreSQL");
+
+        let my = ServiceDetector::detect_mysql();
+        assert_eq!(my.id, "mysql");
+    }
+}

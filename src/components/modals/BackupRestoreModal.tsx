@@ -113,7 +113,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
 
   if (!isOpen || !connection) return null;
 
-  const currentService = detectedServices.find(s => s.id === connection.type.toLowerCase());
+  const currentService = detectedServices.find(s => s.id === (connection?.type || '').toLowerCase());
   const hasLocalCli = currentService && Object.keys(currentService.tools).length > 0;
 
   const handlePickFile = async () => {
@@ -173,7 +173,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     try {
       if (mode === 'backup') {
         const options: BackupOptions = {
-          connectionId: connection.id,
+          connectionId: connection?.id || '',
           databaseName,
           outputPath: filePath,
           format,
@@ -183,7 +183,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         await safeApi.startBackup(options);
       } else {
         const options: RestoreOptions = {
-          connectionId: connection.id,
+          connectionId: connection?.id || '',
           databaseName,
           inputPath: filePath,
           format,
@@ -226,7 +226,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   {mode === 'backup' ? 'Assistente de Backup de Banco de Dados' : 'Assistente de Restauração de Banco'}
                 </h3>
                 <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  {connection.name} ({connection.type})
+                  {connection?.name || 'Conexão'} ({connection?.type || 'DB'})
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
