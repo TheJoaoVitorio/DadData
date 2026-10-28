@@ -3,6 +3,9 @@ import { Sidebar } from './components/layout/Sidebar';
 import { SqlEditor } from './components/editor/SqlEditor';
 import { DataGrid } from './components/grid/DataGrid';
 import { ConnectionDrawer } from './components/connections/ConnectionDrawer';
+import { BackupRestoreModal } from './components/modals/BackupRestoreModal';
+import { ServerManagerDrawer } from './components/modals/ServerManagerDrawer';
+import { DdlModal } from './components/modals/DdlModal';
 import { AddRowDrawer } from './components/grid/AddRowDrawer';
 import { FloatingAiButton } from './components/layout/FloatingAiButton';
 import { StatusBar } from './components/layout/StatusBar';
@@ -95,6 +98,45 @@ export const App: React.FC = () => {
   // Drawers
   const [isConnectionDrawerOpen, setIsConnectionDrawerOpen] = useState(false);
   const [isAddRowDrawerOpen, setIsAddRowDrawerOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [backupModalMode, setBackupModalMode] = useState<'backup' | 'restore'>('backup');
+  const [backupDatabaseTarget, setBackupDatabaseTarget] = useState<string>('');
+  const [backupTableTarget, setBackupTableTarget] = useState<string | undefined>(undefined);
+  const [isServerManagerOpen, setIsServerManagerOpen] = useState(false);
+  const [ddlModal, setDdlModal] = useState<{ isOpen: boolean; objectName: string; objectType: string; ddl: string }>({
+    isOpen: false,
+    objectName: '',
+    objectType: '',
+    ddl: ''
+  });
+
+  const handleOpenBackup = (dbName?: string, tableName?: string) => {
+    setBackupModalMode('backup');
+    setBackupDatabaseTarget(dbName || activeDatabase || activeConnection?.database || '');
+    setBackupTableTarget(tableName);
+    setIsBackupModalOpen(true);
+  };
+
+  const handleOpenRestore = (dbName?: string) => {
+    setBackupModalMode('restore');
+    setBackupDatabaseTarget(dbName || activeDatabase || activeConnection?.database || '');
+    setIsBackupModalOpen(true);
+  };
+
+  const handleShowDdl = async (objectName: string, objectType: string, schema?: string) => {
+    if (!activeConnection) return;
+    try {
+      const res = await safeApi.getObjectDdl(activeConnection.id, objectType, objectName, schema);
+      setDdlModal({
+        isOpen: true,
+        objectName: res.objectName,
+        objectType: res.objectType,
+        ddl: res.ddl
+      });
+    } catch (err: any) {
+      showToast(`Erro ao extrair DDL: ${err?.message || err}`, 'error');
+    }
+  };
 
   // Toast feedback
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -867,7 +909,11 @@ export const App: React.FC = () => {
           onDeleteConnection={handleDeleteConnection}
           onOpenNewQuery={handleOpenNewQuery}
           onOpenNewConnection={() => setIsConnectionDrawerOpen(true)}
-          onRefreshSchema={handleRefreshSchema}
+                    onRefreshSchema={handleRefreshSchema}
+          onOpenBackup={handleOpenBackup}
+          onOpenRestore={handleOpenRestore}
+          onOpenServerManager={() => setIsServerManagerOpen(true)}
+          onShowDdl={handleShowDdl}
           isLoading={isLoading}
         />
 
@@ -1026,6 +1072,29 @@ export const App: React.FC = () => {
           onSave={handleAddRow}
         />
       )}
+      {/* SGBD Modals */}
+      <BackupRestoreModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+        mode={backupModalMode}
+        connection={activeConnection}
+        defaultDatabase={backupDatabaseTarget}
+        defaultTable={backupTableTarget}
+        onSuccess={() => showToast(backupModalMode === 'backup' ? 'Backup gerado com sucesso!' : 'Restauração concluída!', 'success')}
+      />
+
+      <ServerManagerDrawer
+        isOpen={isServerManagerOpen}
+        onClose={() => setIsServerManagerOpen(false)}
+      />
+
+      <DdlModal
+        isOpen={ddlModal.isOpen}
+        onClose={() => setDdlModal(prev => ({ ...prev, isOpen: false }))}
+        objectName={ddlModal.objectName}
+        objectType={ddlModal.objectType}
+        ddl={ddlModal.ddl}
+      />
     </div>
   );
 };

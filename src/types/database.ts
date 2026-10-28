@@ -112,3 +112,69 @@ export interface ExportResult {
   fileSizeBytes: number;
   message?: string;
 }
+
+export interface DetectedService {
+  id: string;
+  name: string;
+  label: string;
+  status: 'running' | 'stopped' | 'not_installed';
+  port?: number;
+  version?: string;
+  tools: Record<string, string>;
+  isPortable: boolean;
+  serviceName?: string;
+}
+
+export interface BackupOptions {
+  connectionId: string;
+  databaseName?: string;
+  outputPath: string;
+  format: 'sql' | 'custom' | 'tar' | 'zip' | 'bak';
+  dumpType: 'full' | 'schema_only' | 'data_only';
+  dropExisting?: boolean;
+  customToolPath?: string;
+}
+
+export interface RestoreOptions {
+  connectionId: string;
+  databaseName?: string;
+  inputPath: string;
+  format?: string;
+  dropFirst?: boolean;
+  customToolPath?: string;
+}
+
+export interface LogEvent {
+  stream: 'stdout' | 'stderr' | 'info' | 'error';
+  message: string;
+  timestamp: string;
+  percentage?: number;
+  isDone: boolean;
+  success: boolean;
+}
+
+export interface DatabaseTreeNode {
+  id: string;
+  label: string;
+  nodeType: 'database' | 'schema' | 'table_folder' | 'view_folder' | 'proc_folder' | 'trigger_folder' | 'table' | 'view' | 'procedure' | 'trigger' | 'index' | 'column';
+  schema?: string;
+  rowCount?: number;
+  children: DatabaseTreeNode[];
+  metadata?: Record<string, any>;
+}
+
+export interface DdlResult {
+  objectName: string;
+  objectType: string;
+  ddl: string;
+}
+
+export interface PortableToolStatus {
+  id: string;
+  name: string;
+  isInstalled: boolean;
+  version?: string;
+  path?: string;
+  downloadUrl?: string;
+  sizeBytes?: number;
+}

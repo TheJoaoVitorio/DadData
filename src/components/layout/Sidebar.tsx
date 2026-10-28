@@ -20,6 +20,9 @@ import {
   Table as LucideTable,
   Eye,
   Database,
+  Archive,
+  Server,
+  Code2,
   Trash2,
   Pencil
 } from 'lucide-react';
@@ -45,6 +48,10 @@ interface SidebarProps {
   onOpenNewQuery: () => void;
   onOpenNewConnection: () => void;
   onRefreshSchema: () => void;
+  onOpenBackup?: (dbName?: string, tableName?: string) => void;
+  onOpenRestore?: (dbName?: string) => void;
+  onOpenServerManager?: () => void;
+  onShowDdl?: (objectName: string, objectType: string, schema?: string) => void;
   isLoading?: boolean;
 }
 
@@ -85,8 +92,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenNewQuery,
   onOpenNewConnection,
   onRefreshSchema,
+  onOpenBackup,
+  onOpenRestore,
+  onOpenServerManager,
+  onShowDdl,
   isLoading = false
 }) => {
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entity: TableInfo } | null>(null);
+
+  useEffect(() => {
+    const handleClose = () => setContextMenu(null);
+    window.addEventListener('click', handleClose);
+    return () => window.removeEventListener('click', handleClose);
+  }, []);
   const [activeRail, setActiveRail] = useState<'explorer' | 'pinned' | 'history'>('explorer');
   const [filterText, setFilterText] = useState('');
   const [isConnDropdownOpen, setIsConnDropdownOpen] = useState(false);
@@ -196,6 +214,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             } else {
               onSelectTable(entity.name, entity.schema, entity.type);
             }
+          }}
+          onContextMenu={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            setContextMenu({ x: e.clientX, y: e.clientY, entity });
           }}
           className={`h-7 px-2 flex items-center justify-between text-xs cursor-pointer group rounded-lg transition-colors select-none ${
             isSelected
@@ -348,6 +371,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="p-2 rounded-xl text-zinc-400 hover:text-zinc-800 hover:bg-zinc-200/60 transition-all cursor-pointer"
         >
           <Clock className="w-4 h-4" />
+        </button>
+        {/* Backup and Restore */}
+        <button
+          onClick={() => onOpenBackup && onOpenBackup(activeDatabase)}
+          title="Backup e Restauração de Banco de Dados"
+          className="p-2 rounded-xl text-zinc-400 hover:text-amber-600 hover:bg-amber-100/50 transition-all cursor-pointer"
+        >
+          <Archive className="w-4 h-4" />
+        </button>
+
+        {/* Local Services and Server Manager */}
+        <button
+          onClick={() => onOpenServerManager && onOpenServerManager()}
+          title="Serviços e Servidores Locais"
+          className="p-2 rounded-xl text-zinc-400 hover:text-violet-600 hover:bg-violet-100/50 transition-all cursor-pointer"
+        >
+          <Server className="w-4 h-4" />
         </button>
 
         <div className="flex-1" />
@@ -701,6 +741,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </ShinyButton>
         </div>
       </div>
+      {/* Context Menu Popup */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-48 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 text-xs text-slate-700 dark:text-slate-200 animate-in fade-in zoom-in-95 duration-100"
+          style={{ top: Math.min(contextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 800) - 200), left: contextMenu.x }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-1 font-semibold text-[11px] text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 mb-1">
+            {contextMenu.entity.name}
+          </div>
+          <button
+            onClick={() => {
+              onSelectTable(contextMenu.entity.name, contextMenu.entity.schema, contextMenu.entity.type);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-200"
+          >
+            <LucideTable className="w-3.5 h-3.5 text-amber-500" />
+            Visualizar Dados (Top 300)
+          </button>
+          <button
+            onClick={() => {
+              if (onShowDdl) onShowDdl(contextMenu.entity.name, contextMenu.entity.type, contextMenu.entity.schema);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-200"
+          >
+            <Code2 className="w-3.5 h-3.5 text-amber-500" />
+            Exibir DDL (CREATE Statement)
+          </button>
+          <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+          <button
+            onClick={() => {
+              if (onOpenBackup) onOpenBackup(activeDatabase, contextMenu.entity.name);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-200"
+          >
+            <Archive className="w-3.5 h-3.5 text-amber-500" />
+            Fazer Backup do Banco...
+          </button>
+          <button
+            onClick={() => {
+              if (onOpenRestore) onOpenRestore(activeDatabase);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-200"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-amber-500" />
+            Restaurar neste Banco...
+          </button>
+        </div>
+      )}
     </aside>
   );
 };

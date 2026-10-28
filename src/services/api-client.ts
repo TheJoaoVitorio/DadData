@@ -1,5 +1,20 @@
-import { ConnectionConfig, ExportOptions, QueryResult, TableInfo, ColumnInfo, MutationResult } from '@shared/types/database';
+import {
+  ConnectionConfig,
+  ExportOptions,
+  QueryResult,
+  TableInfo,
+  ColumnInfo,
+  MutationResult,
+  DetectedService,
+  BackupOptions,
+  RestoreOptions,
+  LogEvent,
+  DatabaseTreeNode,
+  DdlResult,
+  PortableToolStatus
+} from '@shared/types/database';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 
 export const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
@@ -242,7 +257,7 @@ export const safeApi = {
       return selected as string | null;
     }
 
-    // Web Fallback: Create input[type="file"] so it never errors
+    // Web Fallback: Create input[type="file"]
     return new Promise(resolve => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -320,5 +335,174 @@ export const safeApi = {
       fileSizeBytes: 1024,
       message: 'Exportado com sucesso!'
     };
+  },
+
+  // --- SGBD & Discovery / Backup ---
+
+  detectServices: async (): Promise<DetectedService[]> => {
+    if (isTauri) {
+      return invoke<DetectedService[]>('sys_detect_services');
+    }
+    return [
+      {
+        id: 'postgres',
+        name: 'PostgreSQL',
+        label: 'PostgreSQL Database Server',
+        status: 'running',
+        port: 5432,
+        version: '16.4',
+        tools: { pg_dump: 'pg_dump.exe', pg_restore: 'pg_restore.exe', psql: 'psql.exe' },
+        isPortable: false
+      },
+      {
+        id: 'mysql',
+        name: 'MySQL / MariaDB',
+        label: 'MySQL Server',
+        status: 'stopped',
+        port: 3306,
+        tools: {},
+        isPortable: false
+      },
+      {
+        id: 'mssql',
+        name: 'Microsoft SQL Server',
+        label: 'SQL Server (T-SQL)',
+        status: 'not_installed',
+        tools: {},
+        isPortable: false
+      },
+      {
+        id: 'sqlite',
+        name: 'SQLite 3',
+        label: 'SQLite Motor Embutido',
+        status: 'running',
+        version: '3.46 (Nativo)',
+        tools: { backup_engine: 'Native Rusqlite' },
+        isPortable: true
+      }
+    ];
+  },
+
+  getPortableToolsStatus: async (): Promise<PortableToolStatus[]> => {
+    if (isTauri) {
+      return invoke<PortableToolStatus[]>('sys_get_portable_tools_status');
+    }
+    return [
+      {
+        id: 'postgres_tools',
+        name: 'PostgreSQL Client Tools (pg_dump, pg_restore)',
+        isInstalled: false,
+        version: '16.4 Portable',
+        downloadUrl: 'https://github.com/TheJoaoVitorio/daddata-runtimes/releases/download/v1.0/postgres-tools-win64.zip',
+        sizeBytes: 18 * 1024 * 1024
+      },
+      {
+        id: 'mysql_tools',
+        name: 'MySQL Client Tools (mysqldump, mysql)',
+        isInstalled: false,
+        version: '8.0 Portable',
+        downloadUrl: 'https://github.com/TheJoaoVitorio/daddata-runtimes/releases/download/v1.0/mysql-tools-win64.zip',
+        sizeBytes: 14 * 1024 * 1024
+      },
+      {
+        id: 'sqlite_engine',
+        name: 'SQLite 3 Engine (Embutido Rust)',
+        isInstalled: true,
+        version: '3.46 (Nativo)',
+        sizeBytes: 0
+      }
+    ];
+  },
+
+  downloadPortableTool: async (toolId: string): Promise<string> => {
+    if (isTauri) {
+      return invoke<string>('sys_download_portable_tool', { toolId });
+    }
+    return `Ferramenta ${toolId} simulada com sucesso!`;
+  },
+
+  getSchemaTree: async (connectionId: string, schemaFilter?: string): Promise<DatabaseTreeNode[]> => {
+    if (isTauri) {
+      return invoke<DatabaseTreeNode[]>('db_get_schema_tree', { connectionId, schemaFilter });
+    }
+    // Web Fallback Tree
+    return [
+      {
+        id: 'db:mock',
+        label: 'database_production',
+        nodeType: 'database',
+        children: [
+          {
+            id: 'schema:public',
+            label: 'public',
+            nodeType: 'schema',
+            children: [
+              {
+                id: 'folder:tables',
+                label: 'Tabelas (6)',
+                nodeType: 'table_folder',
+                children: [
+                  { id: 't:users', label: 'users', nodeType: 'table', rowCount: 1540, children: [] },
+                  { id: 't:orders', label: 'orders', nodeType: 'table', rowCount: 8900, children: [] },
+                  { id: 't:products', label: 'products', nodeType: 'table', rowCount: 430, children: [] }
+                ]
+              },
+              {
+                id: 'folder:views',
+                label: 'Views (2)',
+                nodeType: 'view_folder',
+                children: [
+                  { id: 'v:active_orders', label: 'v_active_orders', nodeType: 'view', children: [] }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ];
+  },
+
+  getObjectDdl: async (
+    connectionId: string,
+    objectType: string,
+    objectName: string,
+    schema?: string
+  ): Promise<DdlResult> => {
+    if (isTauri) {
+      return invoke<DdlResult>('db_get_object_ddl', { connectionId, objectType, objectName, schema });
+    }
+    return {
+      objectName,
+      objectType,
+      ddl: `-- DDL Simulado para ${objectName}\nCREATE TABLE ${objectName} (\n    id INTEGER PRIMARY KEY,\n    name VARCHAR(255) NOT NULL,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);`
+    };
+  },
+
+  startBackup: async (options: BackupOptions): Promise<string> => {
+    if (isTauri) {
+      return invoke<string>('db_start_backup', { options });
+    }
+    return `Backup simulado para ${options.outputPath}`;
+  },
+
+  startRestore: async (options: RestoreOptions): Promise<string> => {
+    if (isTauri) {
+      return invoke<string>('db_start_restore', { options });
+    }
+    return `Restauração simulada de ${options.inputPath}`;
+  },
+
+  onBackupLog: async (callback: (log: LogEvent) => void): Promise<UnlistenFn> => {
+    if (isTauri) {
+      return listen<LogEvent>('backup:log', event => callback(event.payload));
+    }
+    return () => {};
+  },
+
+  onRestoreLog: async (callback: (log: LogEvent) => void): Promise<UnlistenFn> => {
+    if (isTauri) {
+      return listen<LogEvent>('restore:log', event => callback(event.payload));
+    }
+    return () => {};
   }
 };
