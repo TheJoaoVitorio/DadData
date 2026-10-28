@@ -3,8 +3,9 @@ import { Sidebar } from './components/layout/Sidebar';
 import { SqlEditor } from './components/editor/SqlEditor';
 import { DataGrid } from './components/grid/DataGrid';
 import { ConnectionDrawer } from './components/connections/ConnectionDrawer';
-import { BackupRestoreModal } from './components/modals/BackupRestoreModal';
-import { ServerManagerDrawer } from './components/modals/ServerManagerDrawer';
+import { HomeView } from './components/home/HomeView';
+import { BackupTab } from './components/tabs/BackupTab';
+import { ServicesTab } from './components/tabs/ServicesTab';
 import { DdlModal } from './components/modals/DdlModal';
 import { AddRowDrawer } from './components/grid/AddRowDrawer';
 import { FloatingAiButton } from './components/layout/FloatingAiButton';
@@ -20,13 +21,13 @@ import {
   ColumnInfo,
   ExportOptions
 } from '@shared/types/database';
-import { X, CheckCircle2, AlertCircle, Monitor, Plus, RefreshCw, Pencil } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Monitor, Plus, RefreshCw, Pencil, Home, Archive, Server } from 'lucide-react';
 import { safeApi, isDesktop } from './services/api-client';
 
 export interface TabItem {
   id: string;
   title: string;
-  type: 'query' | 'table' | 'view';
+  type: 'home' | 'query' | 'table' | 'view' | 'backup' | 'services';
   tableName?: string;
   schema?: string;
   query?: string;
@@ -35,6 +36,8 @@ export interface TabItem {
   isLoading?: boolean;
   isLoadingMore?: boolean;
   batchSize?: number;
+  backupMode?: 'backup' | 'restore';
+  databaseName?: string;
 }
 
 export const App: React.FC = () => {
@@ -47,20 +50,15 @@ export const App: React.FC = () => {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
 
-  // Tabs - each tab encapsulates its own query, queryResult, columnsMeta, and loading state
+  // Tabs - initial tab is the MySQL Workbench style Home screen
   const [tabs, setTabs] = useState<TabItem[]>([
     {
-      id: 'query_1',
-      title: 'Consulta SQL 1',
-      type: 'query',
-      query: 'SELECT * FROM clients;',
-      queryResult: null,
-      columnsMeta: [],
-      isLoading: false,
-      batchSize: 50
+      id: 'home',
+      title: 'Início',
+      type: 'home'
     }
   ]);
-  const [activeTabId, setActiveTabId] = useState<string>('query_1');
+  const [activeTabId, setActiveTabId] = useState<string>('home');
 
   // Splitter & SQL Editor Accordion
   const [isEditorCollapsed, setIsEditorCollapsed] = useState(false);
@@ -92,17 +90,12 @@ export const App: React.FC = () => {
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  // Global loading (for connection / schema refreshes)
+  // Global loading
   const [isLoading, setIsLoading] = useState(false);
 
-  // Drawers
+  // Drawers & Modals
   const [isConnectionDrawerOpen, setIsConnectionDrawerOpen] = useState(false);
   const [isAddRowDrawerOpen, setIsAddRowDrawerOpen] = useState(false);
-  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
-  const [backupModalMode, setBackupModalMode] = useState<'backup' | 'restore'>('backup');
-  const [backupDatabaseTarget, setBackupDatabaseTarget] = useState<string>('');
-  const [backupTableTarget, setBackupTableTarget] = useState<string | undefined>(undefined);
-  const [isServerManagerOpen, setIsServerManagerOpen] = useState(false);
   const [ddlModal, setDdlModal] = useState<{ isOpen: boolean; objectName: string; objectType: string; ddl: string }>({
     isOpen: false,
     objectName: '',
@@ -117,25 +110,75 @@ export const App: React.FC = () => {
     return String(err);
   };
 
-  const handleOpenBackup = (dbName?: string, tableName?: string) => {
-    if (!activeConnection) {
-      showToast('Selecione ou conecte-se a um banco de dados primeiro.', 'error');
+  const handleOpenHomeTab = () => {
+    const existing = tabs.find(t => t.type === 'home');
+    if (existing) {
+      setActiveTabId(existing.id);
       return;
     }
-    setBackupModalMode('backup');
-    setBackupDatabaseTarget(dbName || activeDatabase || activeConnection?.database || '');
-    setBackupTableTarget(tableName);
-    setIsBackupModalOpen(true);
+    const homeTab: TabItem = {
+      id: 'home',
+      title: 'Início',
+      type: 'home'
+    };
+    setTabs(prev => [homeTab, ...prev]);
+    setActiveTabId('home');
+  };
+
+  const handleOpenBackupTab = (dbName?: string, tableName?: string, mode: 'backup' | 'restore' = 'backup') => {
+    const targetDb = dbName || activeDatabase || activeConnection?.database || '';
+    const existing = tabs.find(t => t.type === 'backup');
+    if (existing) {
+      setTabs(prev =>
+        prev.map(t =>
+          t.id === existing.id
+            ? {
+                ...t,
+                databaseName: targetDb || t.databaseName,
+                tableName: tableName !== undefined ? tableName : t.tableName,
+                backupMode: mode,
+                title: mode === 'backup' ? 'Backup & Restauração' : 'Restauração de Banco'
+              }
+            : t
+        )
+      );
+      setActiveTabId(existing.id);
+      return;
+    }
+
+    const newTab: TabItem = {
+      id: `backup_${Date.now()}`,
+      title: mode === 'backup' ? 'Backup & Restauração' : 'Restauração de Banco',
+      type: 'backup',
+      databaseName: targetDb,
+      tableName,
+      backupMode: mode
+    };
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const handleOpenBackup = (dbName?: string, tableName?: string) => {
+    handleOpenBackupTab(dbName, tableName, 'backup');
   };
 
   const handleOpenRestore = (dbName?: string) => {
-    if (!activeConnection) {
-      showToast('Selecione ou conecte-se a um banco de dados primeiro.', 'error');
+    handleOpenBackupTab(dbName, undefined, 'restore');
+  };
+
+  const handleOpenServerManager = () => {
+    const existing = tabs.find(t => t.type === 'services');
+    if (existing) {
+      setActiveTabId(existing.id);
       return;
     }
-    setBackupModalMode('restore');
-    setBackupDatabaseTarget(dbName || activeDatabase || activeConnection?.database || '');
-    setIsBackupModalOpen(true);
+    const newTab: TabItem = {
+      id: `services_${Date.now()}`,
+      title: 'Serviços do Sistema',
+      type: 'services'
+    };
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newTab.id);
   };
 
   const handleShowDdl = async (objectName: string, objectType: string, schema?: string) => {
@@ -161,7 +204,7 @@ export const App: React.FC = () => {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Initial load
+  // Initial load: Fetch saved connections and populate home screen
   useEffect(() => {
     initApp();
   }, []);
@@ -174,9 +217,10 @@ export const App: React.FC = () => {
       }
       const active = await safeApi.getActiveConnections();
       if (active && active.length > 0) {
-        await handleConnect(active[0]);
-      } else if (saved && saved.length > 0) {
-        await handleConnect(saved[0]);
+        setActiveConnection(active[0]);
+        if (active[0].database) setActiveDatabase(active[0].database);
+        const tableList = await safeApi.listTables(active[0].id).catch(() => []);
+        setTables(tableList);
       }
     } catch (err: any) {
       console.warn('Initial connection notice:', err);
@@ -199,7 +243,7 @@ export const App: React.FC = () => {
   const FETCH_CHUNK_SIZE = 300;
   const isFetchingMoreRef = useRef(false);
 
-  // Helper to load table data and metadata into a specific tab (supports continuous on-demand infinite scroll fetching)
+  // Helper to load table data and metadata into a specific tab
   const loadTableDataForTab = async (
     tabId: string,
     tableName: string,
@@ -251,10 +295,10 @@ export const App: React.FC = () => {
 
           return {
             ...t,
-            columnsMeta: meta ?? t.columnsMeta,
-            queryResult: data,
             isLoading: false,
-            isLoadingMore: false
+            isLoadingMore: false,
+            columnsMeta: meta || t.columnsMeta || [],
+            queryResult: data
           };
         })
       );
@@ -266,17 +310,19 @@ export const App: React.FC = () => {
             : t
         )
       );
-      showToast(`Erro ao carregar dados de ${tableName}: ${formatErr(err)}`, 'error');
+      showToast(`Erro ao carregar dados da tabela: ${formatErr(err)}`, 'error');
     }
   };
 
   const handleLoadMore = async () => {
     const currentTab = tabs.find(t => t.id === activeTabId);
-    if (!currentTab || !currentTab.tableName || !activeConnection || currentTab.isLoadingMore || isFetchingMoreRef.current) return;
-    if (currentTab.queryResult && !currentTab.queryResult.hasMore) return;
+    if (!currentTab || !currentTab.tableName || !activeConnection) return;
+    if (currentTab.isLoading || currentTab.isLoadingMore) return;
+    if (currentTab.queryResult?.hasMore === false) return;
+    if (isFetchingMoreRef.current) return;
 
     isFetchingMoreRef.current = true;
-    const currentRowsCount = currentTab.queryResult?.rows?.length || 0;
+    const currentRowsCount = currentTab.queryResult?.rows.length || 0;
 
     try {
       await loadTableDataForTab(
@@ -327,11 +373,14 @@ export const App: React.FC = () => {
         const currentDb = res.databaseName || config.database || '';
         setActiveDatabase(currentDb);
 
+        // Update saved connections with last connected timestamp
+        const now = new Date().toISOString();
+        const updatedConfig = { ...config, lastConnectedAt: now };
         setSavedConnections(prev => {
           const exists = prev.some(c => c.id === config.id);
-          return exists ? prev : [...prev, config];
+          return exists ? prev.map(c => c.id === config.id ? updatedConfig : c) : [...prev, updatedConfig];
         });
-        await safeApi.saveConnection(config).catch(e => console.warn('Could not save connection:', e));
+        await safeApi.saveConnection(updatedConfig).catch(e => console.warn('Could not save connection:', e));
 
         const isServer = ['postgres', 'mysql', 'mssql', 'mongodb'].includes(config.type);
         const isDbExplicitlySpecified = !!config.database && config.database.trim() !== '' && config.database !== 'master';
@@ -349,8 +398,9 @@ export const App: React.FC = () => {
           setServerDatabases([]);
         }
 
+        const homeTab: TabItem = { id: 'home', title: 'Início', type: 'home' };
+
         // Rule: If connected to a server and NO specific database was selected:
-        // List all databases in our sidebar listing and main screen so the user can choose which database to explore!
         if (isServer && !isDbExplicitlySpecified && serverDbs.length > 0) {
           const dbEntities: TableInfo[] = serverDbs.map(dbName => ({
             name: dbName,
@@ -363,11 +413,12 @@ export const App: React.FC = () => {
           setActiveDatabase('');
 
           setTabs([
+            homeTab,
             {
               id: 'server_databases',
               title: `Servidor: ${config.name}`,
               type: 'query',
-              query: '-- Bancos de dados disponíveis no servidor.\n-- Dê um clique em qualquer banco na barra lateral para explorar suas tabelas.',
+              query: '-- Bancos de dados disponíveis no servidor.\n-- Clique em qualquer banco na barra lateral para explorar suas tabelas.',
               queryResult: {
                 columns: ['BANCO_DE_DADOS', 'TIPO', 'STATUS'],
                 rows: serverDbs.map(d => ({
@@ -408,6 +459,7 @@ export const App: React.FC = () => {
             : `SELECT * FROM "${firstTable}" LIMIT 100;`;
 
           setTabs([
+            homeTab,
             {
               id: 'query_1',
               title: 'Consulta SQL 1',
@@ -435,6 +487,7 @@ export const App: React.FC = () => {
         } else {
           setSelectedTable(null);
           setTabs([
+            homeTab,
             {
               id: 'query_1',
               title: 'Consulta SQL 1',
@@ -449,7 +502,9 @@ export const App: React.FC = () => {
           setActiveTabId('query_1');
         }
 
-        showToast(`Conectado a ${config.name}! (${tableList.length} tabelas carregadas)`);
+        showToast(`Conectado com sucesso a ${config.name}!`);
+      } else {
+        showToast(res.message || 'Falha ao conectar.', 'error');
       }
     } catch (err: any) {
       showToast(`Erro na conexão: ${formatErr(err)}`, 'error');
@@ -462,17 +517,80 @@ export const App: React.FC = () => {
     if (!activeConnection) return;
     setIsLoading(true);
     try {
-      const newConfig: ConnectionConfig = {
+      const updatedConfig: ConnectionConfig = {
         ...activeConnection,
-        database: newDbName,
-        name: activeConnection.name.includes('(')
-          ? `${activeConnection.name.split(' (')[0]} (${newDbName})`
-          : `${activeConnection.name} (${newDbName})`
+        database: newDbName
       };
-      await handleConnect(newConfig);
-      showToast(`Banco de dados alternado para "${newDbName}"!`);
+
+      await safeApi.connect(updatedConfig);
+      setActiveConnection(updatedConfig);
+      setActiveDatabase(newDbName);
+
+      const tableList = await safeApi.listTables(updatedConfig.id);
+      setTables(tableList);
+      setSelectedTable(null);
+
+      const homeTab: TabItem = { id: 'home', title: 'Início', type: 'home' };
+
+      if (tableList.length > 0) {
+        const entity = tableList[0];
+        const firstTable = entity.name;
+        const tabType: 'table' | 'view' = entity.type === 'view' ? 'view' : 'table';
+        const tabId = entity.schema && entity.schema !== 'default'
+          ? `${tabType}_${entity.schema}_${firstTable}`
+          : `${tabType}_${firstTable}`;
+
+        setSelectedTable(firstTable);
+        const qualifiedQuery = entity.schema && entity.schema !== 'default' && entity.schema !== 'public'
+          ? `SELECT * FROM "${entity.schema}"."${firstTable}" LIMIT 100;`
+          : `SELECT * FROM "${firstTable}" LIMIT 100;`;
+
+        setTabs([
+          homeTab,
+          {
+            id: 'query_1',
+            title: 'Consulta SQL 1',
+            type: 'query',
+            query: qualifiedQuery,
+            queryResult: null,
+            columnsMeta: [],
+            isLoading: false
+          },
+          {
+            id: tabId,
+            title: entity.schema && entity.schema !== 'default' && entity.schema !== 'public'
+              ? `${entity.schema}.${firstTable}`
+              : firstTable,
+            type: tabType,
+            tableName: firstTable,
+            schema: entity.schema,
+            queryResult: null,
+            columnsMeta: [],
+            isLoading: true
+          }
+        ]);
+        setActiveTabId(tabId);
+        await loadTableDataForTab(tabId, firstTable, updatedConfig.id, entity.schema);
+      } else {
+        setTabs([
+          homeTab,
+          {
+            id: 'query_1',
+            title: 'Consulta SQL 1',
+            type: 'query',
+            query: 'SELECT * FROM clients;',
+            queryResult: null,
+            columnsMeta: [],
+            isLoading: false,
+            batchSize: 50
+          }
+        ]);
+        setActiveTabId('query_1');
+      }
+
+      showToast(`Conectado ao banco de dados "${newDbName}" com sucesso!`);
     } catch (err: any) {
-      showToast(`Erro ao alternar para banco ${newDbName}: ${formatErr(err)}`, 'error');
+      showToast(`Erro ao alternar para o banco "${newDbName}": ${formatErr(err)}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -485,21 +603,14 @@ export const App: React.FC = () => {
       setActiveConnection(null);
       setTables([]);
       setSelectedTable(null);
-      setServerDatabases([]);
-      setActiveDatabase('');
       setTabs([
         {
-          id: 'query_1',
-          title: 'Consulta SQL 1',
-          type: 'query',
-          query: 'SELECT * FROM clients;',
-          queryResult: null,
-          columnsMeta: [],
-          isLoading: false,
-          batchSize: 50
+          id: 'home',
+          title: 'Início',
+          type: 'home'
         }
       ]);
-      setActiveTabId('query_1');
+      setActiveTabId('home');
       showToast('Desconectado do banco.');
     } catch (err: any) {
       showToast(`Erro ao desconectar: ${formatErr(err)}`, 'error');
@@ -648,50 +759,35 @@ export const App: React.FC = () => {
       return;
     }
 
-    let targetTabId = activeTabId;
-    const targetTab = tabs.find(t => t.id === targetTabId);
-
-    // If active tab is not a query tab, open a new query tab and execute there
-    if (targetTab && targetTab.type !== 'query') {
-      const newId = `query_${Date.now()}`;
-      const queryCount = tabs.filter(t => t.type === 'query').length;
-      const newTab: TabItem = {
-        id: newId,
-        title: `Consulta SQL ${queryCount + 1}`,
-        type: 'query',
-        query: queryText,
-        queryResult: null,
-        columnsMeta: [],
-        isLoading: true
-      };
-      setTabs(prev => [...prev, newTab]);
-      setActiveTabId(newId);
-      targetTabId = newId;
-    } else {
-      setTabs(prev =>
-        prev.map(t =>
-          t.id === targetTabId
-            ? { ...t, query: queryText, isLoading: true }
-            : t
-        )
-      );
-    }
+    setTabs(prev =>
+      prev.map(t => (t.id === activeTabId ? { ...t, isLoading: true } : t))
+    );
 
     try {
       const res = await safeApi.executeQuery(activeConnection.id, queryText);
+
       setTabs(prev =>
         prev.map(t =>
-          t.id === targetTabId
-            ? { ...t, queryResult: res, isLoading: false }
+          t.id === activeTabId
+            ? {
+                ...t,
+                isLoading: false,
+                queryResult: res,
+                columnsMeta: res.columnDetails || []
+              }
             : t
         )
       );
-      showToast(`Consulta executada: ${res.rowCount} registros em ${res.executionTimeMs}ms.`);
+
+      const msg = res.statementType && res.statementType !== 'SELECT'
+        ? `${res.statementType} executado com sucesso (${res.rowCount} linhas afetadas, ${res.executionTimeMs}ms)`
+        : `Consulta executada: ${res.rowCount} registros em ${res.executionTimeMs}ms`;
+      showToast(msg);
     } catch (err: any) {
       setTabs(prev =>
-        prev.map(t => (t.id === targetTabId ? { ...t, isLoading: false } : t))
+        prev.map(t => (t.id === activeTabId ? { ...t, isLoading: false } : t))
       );
-      showToast(`Falha na query: ${formatErr(err)}`, 'error');
+      showToast(`Erro na query: ${formatErr(err)}`, 'error');
     }
   };
 
@@ -756,47 +852,32 @@ export const App: React.FC = () => {
   };
 
   const handleExport = async (format: 'csv' | 'xlsx') => {
-    const currentTab = tabs.find(t => t.id === activeTabId);
-    const hasGridData = currentTab?.queryResult && currentTab.queryResult.rows.length > 0;
-
-    if (!activeConnection && !hasGridData) {
-      showToast('Nenhuma conexão ativa ou dados para exportar.', 'error');
+    const connId = activeConnection?.id;
+    if (!connId) {
+      showToast('Conecte-se a um banco de dados primeiro.', 'error');
       return;
     }
 
-    // Determine intuitive filename based on tab type, query contents, or table
-    let baseFilename = 'dados';
-    if (currentTab?.type === 'query') {
-      const match = currentTab.query?.match(/FROM\s+["`]?([a-zA-Z0-9_.-]+)["`]?/i);
-      if (match && match[1]) {
-        baseFilename = match[1].replace(/["`]/g, '');
-      } else {
-        baseFilename = (currentTab.title || 'consulta').toLowerCase().replace(/\s+/g, '_');
-      }
-    } else if (currentTab?.tableName) {
-      baseFilename = currentTab.tableName;
-    } else if (selectedTable) {
-      baseFilename = selectedTable;
-    }
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    const tableName = currentTab?.tableName || selectedTable;
+    const defaultName = tableName
+      ? `${tableName}_export.${format}`
+      : `query_export.${format}`;
 
-    const cleanFilename = `${baseFilename.toLowerCase().replace(/[^a-z0-9_-]/gi, '_')}_export.${format}`;
-    const targetPath = await safeApi.saveFileDialog(cleanFilename, format);
-    if (!targetPath) return;
+    const filePath = await safeApi.saveFileDialog(defaultName, format);
+    if (!filePath) return;
 
-    showToast(`Iniciando exportação para ${format.toUpperCase()}...`);
+    const options: ExportOptions = {
+      format,
+      targetFilePath: filePath,
+      tableName: tableName || undefined,
+      query: currentTab?.type === 'query' ? currentTab.query : undefined,
+      rows: currentTab?.queryResult?.rows,
+      columns: currentTab?.queryResult?.columns,
+      includeHeaders: true
+    };
 
     try {
-      const options: ExportOptions = {
-        format,
-        targetFilePath: targetPath,
-        sheetName: baseFilename.slice(0, 31),
-        tableName: currentTab?.type !== 'query' ? (currentTab?.tableName || selectedTable || undefined) : undefined,
-        query: currentTab?.type === 'query' ? currentTab.query : undefined,
-        rows: currentTab?.queryResult?.rows,
-        columns: currentTab?.queryResult?.columns
-      };
-
-      const connId = activeConnection ? activeConnection.id : 'default';
       const res = await safeApi.exportData(connId, options);
       if (res.success) {
         showToast(`Exportado com sucesso para ${res.filePath} (${res.rowCount} registros)!`);
@@ -830,13 +911,16 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Yellow top bar — Magic UI textured header with connection switcher */}
+      {/* Yellow top bar — Magic UI textured header */}
       <header className="relative h-12 flex-shrink-0 px-5 flex items-center justify-between gap-4 text-zinc-950 select-none whitespace-nowrap overflow-hidden">
-        {/* Subtle Magic UI Dot Pattern texture */}
         <DotPattern className="opacity-15 pointer-events-none" />
 
-        {/* Left: Brand Logo & Status */}
-        <div className="relative z-10 flex items-center gap-2.5">
+        {/* Left: Brand Logo & Home Navigation */}
+        <div
+          onClick={handleOpenHomeTab}
+          title="Ir para a Central de Conexões (Home)"
+          className="relative z-10 flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition-opacity"
+        >
           <div className="w-7 h-7 rounded-lg bg-zinc-950 flex items-center justify-center p-1 shadow-xs group">
             <svg viewBox="0 0 24 24" className="w-4 h-4 group-hover:scale-105 transition-transform" fill="none">
               <path
@@ -856,7 +940,7 @@ export const App: React.FC = () => {
           )}
         </div>
 
-        {/* Center: Active Connection Badge & Switcher with Ping indicator */}
+        {/* Center: Active Connection Badge & Switcher */}
         {activeConnection ? (
           <div className="relative z-10 flex items-center gap-2 px-3 py-1 rounded-full bg-white/70 hover:bg-white/90 border border-zinc-950/15 backdrop-blur-xs transition-all shadow-xs">
             <span className="relative flex h-2 w-2 mr-0.5">
@@ -893,11 +977,11 @@ export const App: React.FC = () => {
           <span className="relative z-10 text-xs font-semibold text-zinc-800/80">Nenhum banco de dados conectado</span>
         )}
 
-        {/* Right: New Connection Button with Magic UI ShinyButton */}
+        {/* Right: New Connection Button */}
         <div className="relative z-10 flex items-center gap-2">
           <ShinyButton
             type="button"
-            onClick={() => setIsConnectionDrawerOpen(true)}
+            onClick={handleOpenNewConnection}
             className="h-8 px-4 py-0 rounded-full bg-zinc-950 hover:bg-zinc-900 text-white text-xs font-bold flex items-center gap-1.5 shadow-md border-0"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -906,161 +990,212 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Full workspace container — AbacatePay top curvature (sidebar + content) */}
+      {/* Full workspace container */}
       <div className="flex-1 flex flex-col min-h-0 rounded-t-[32px] overflow-hidden bg-[#F4F6F8]">
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left Sidebar — flush, full height */}
-        <Sidebar
-          activeConnection={activeConnection}
-          savedConnections={savedConnections}
-          serverDatabases={serverDatabases}
-          activeDatabase={activeDatabase}
-          tables={tables}
-          selectedTable={currentTab?.tableName || selectedTable}
-          onSelectTable={handleSelectTable}
-          onSwitchConnection={handleConnect}
-          onSwitchDatabase={handleSwitchDatabase}
-          onDisconnect={handleDisconnect}
-          onDeleteConnection={handleDeleteConnection}
-          onOpenNewQuery={handleOpenNewQuery}
-          onOpenNewConnection={() => setIsConnectionDrawerOpen(true)}
-                    onRefreshSchema={handleRefreshSchema}
-          onOpenBackup={handleOpenBackup}
-          onOpenRestore={handleOpenRestore}
-          onOpenServerManager={() => setIsServerManagerOpen(true)}
-          onShowDdl={handleShowDdl}
-          isLoading={isLoading}
-        />
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* Left Sidebar */}
+          <Sidebar
+            activeConnection={activeConnection}
+            savedConnections={savedConnections}
+            serverDatabases={serverDatabases}
+            activeDatabase={activeDatabase}
+            tables={tables}
+            selectedTable={currentTab?.tableName || selectedTable}
+            onSelectTable={handleSelectTable}
+            onSwitchConnection={handleConnect}
+            onSwitchDatabase={handleSwitchDatabase}
+            onDisconnect={handleDisconnect}
+            onDeleteConnection={handleDeleteConnection}
+            onOpenNewQuery={handleOpenNewQuery}
+            onOpenNewConnection={handleOpenNewConnection}
+            onOpenHome={handleOpenHomeTab}
+            onRefreshSchema={handleRefreshSchema}
+            onOpenBackup={handleOpenBackup}
+            onOpenRestore={handleOpenRestore}
+            onOpenServerManager={handleOpenServerManager}
+            onShowDdl={handleShowDdl}
+            isLoading={isLoading}
+          />
 
-        {/* Right column */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#F4F6F8] pt-3">
-          <main className="relative flex-1 mx-3 mb-2 bg-white rounded-3xl p-3.5 shadow-sm border border-zinc-200/90 flex flex-col min-h-0 overflow-hidden">
-          {/* Tabs Bar */}
-          <div className="flex items-center gap-1.5 pb-2 mb-2 border-b border-zinc-200/80 flex-shrink-0 select-none overflow-x-auto">
-            {tabs.map(tab => {
-              const isActive = tab.id === activeTabId;
-              return (
-                <div
-                  key={tab.id}
-                  onClick={() => handleTabClick(tab)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 cursor-pointer transition-all select-none ${
-                    isActive
-                      ? 'bg-[#FACC15] text-zinc-950 border border-amber-400 shadow-xs ring-1 ring-amber-400/30'
-                      : 'bg-zinc-100/90 hover:bg-zinc-200/90 text-zinc-700'
-                  }`}
-                >
-                  {tab.type === 'query' ? (
-                    <span className={`font-mono text-[11px] font-bold ${isActive ? 'text-zinc-950' : 'text-amber-600'}`}>&lt;&gt;</span>
-                  ) : tab.type === 'view' ? (
-                    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-amber-600'}`} fill="none" stroke="currentColor">
-                      <rect x="1.5" y="2" width="13" height="12" rx="1.5" strokeWidth="1.3" strokeDasharray="2 1.5" />
-                      <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
-                      <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
-                      <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-zinc-600'}`} fill="currentColor">
-                      <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
-                      <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
-                      <line x1="1.5" y1="10" x2="14.5" y2="10" strokeWidth="1.2" />
-                      <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
-                      <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
-                    </svg>
-                  )}
-
-                  <span>{tab.title}</span>
-
-                  {tab.type !== 'query' && (
-                    <span className={`text-[10px] font-mono font-normal ${isActive ? 'text-zinc-800' : 'text-zinc-400'}`}>[all]</span>
-                  )}
-
-                  {tabs.length > 1 && (
-                    <button
-                      onClick={e => handleCloseTab(tab.id, e)}
-                      className="hover:opacity-75 p-0.5 rounded-full text-zinc-500 hover:text-zinc-950 cursor-pointer"
-                      title="Fechar aba"
+          {/* Right column */}
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#F4F6F8] pt-3">
+            <main className="relative flex-1 mx-3 mb-2 bg-white rounded-3xl p-3.5 shadow-sm border border-zinc-200/90 flex flex-col min-h-0 overflow-hidden">
+              {/* Tabs Bar */}
+              <div className="flex items-center gap-1.5 pb-2 mb-2 border-b border-zinc-200/80 flex-shrink-0 select-none overflow-x-auto">
+                {tabs.map(tab => {
+                  const isActive = tab.id === activeTabId;
+                  return (
+                    <div
+                      key={tab.id}
+                      onClick={() => handleTabClick(tab)}
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 cursor-pointer transition-all select-none ${
+                        isActive
+                          ? 'bg-[#FACC15] text-zinc-950 border border-amber-400 shadow-xs ring-1 ring-amber-400/30'
+                          : 'bg-zinc-100/90 hover:bg-zinc-200/90 text-zinc-700'
+                      }`}
                     >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                      {tab.type === 'home' ? (
+                        <Home className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-amber-600'}`} />
+                      ) : tab.type === 'backup' ? (
+                        <Archive className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-amber-600'}`} />
+                      ) : tab.type === 'services' ? (
+                        <Server className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-violet-600'}`} />
+                      ) : tab.type === 'query' ? (
+                        <span className={`font-mono text-[11px] font-bold ${isActive ? 'text-zinc-950' : 'text-amber-600'}`}>&lt;&gt;</span>
+                      ) : tab.type === 'view' ? (
+                        <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-amber-600'}`} fill="none" stroke="currentColor">
+                          <rect x="1.5" y="2" width="13" height="12" rx="1.5" strokeWidth="1.3" strokeDasharray="2 1.5" />
+                          <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
+                          <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
+                          <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-zinc-950' : 'text-zinc-600'}`} fill="currentColor">
+                          <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+                          <line x1="1.5" y1="6" x2="14.5" y2="6" strokeWidth="1.2" />
+                          <line x1="1.5" y1="10" x2="14.5" y2="10" strokeWidth="1.2" />
+                          <line x1="5.5" y1="2" x2="5.5" y2="14" strokeWidth="1.2" />
+                          <line x1="10.5" y1="2" x2="10.5" y2="14" strokeWidth="1.2" />
+                        </svg>
+                      )}
 
-            {/* New Tab Button */}
-            <button
-              onClick={handleOpenNewQuery}
-              className="p-1.5 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer"
-              title="Nova Consulta SQL (Ctrl+N)"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-            </button>
-          </div>
+                      <span>{tab.title}</span>
 
-          {/* Tab Content */}
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {currentTab?.type === 'query' && (
-              <>
-                <SqlEditor
-                  query={currentTab.query || ''}
-                  onQueryChange={handleQueryChange}
-                  onExecute={handleExecuteQuery}
-                  isLoading={currentTab.isLoading || false}
-                  tableName={selectedTable || undefined}
-                  isCollapsed={isEditorCollapsed}
-                  onToggleCollapse={() => setIsEditorCollapsed(!isEditorCollapsed)}
-                  height={isEditorCollapsed ? undefined : editorHeight}
-                  dbType={activeConnection?.type}
-                  columnsMeta={currentTab?.columnsMeta || []}
-                />
+                      {(tab.type === 'table' || tab.type === 'view') && (
+                        <span className={`text-[10px] font-mono font-normal ${isActive ? 'text-zinc-800' : 'text-zinc-400'}`}>[all]</span>
+                      )}
 
-                {/* Resizable Splitter */}
-                {!isEditorCollapsed && (
-                  <div
-                    onMouseDown={handleSplitterMouseDown}
-                    className="h-2 w-full flex items-center justify-center cursor-row-resize select-none my-0.5 hover:bg-amber-100/60 rounded-full transition-colors group flex-shrink-0"
-                    title="Arraste para redimensionar o Editor SQL e a Grid de Dados"
-                  >
-                    <div className="w-12 h-1 rounded-full bg-zinc-300 group-hover:bg-amber-500 transition-colors" />
+                      {tabs.length > 1 && tab.type !== 'home' && (
+                        <button
+                          onClick={e => handleCloseTab(tab.id, e)}
+                          className="hover:opacity-75 p-0.5 rounded-full text-zinc-500 hover:text-zinc-950 cursor-pointer"
+                          title="Fechar aba"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* New Tab Button */}
+                <button
+                  onClick={handleOpenNewQuery}
+                  className="p-1.5 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer"
+                  title="Nova Consulta SQL (Ctrl+N)"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                {currentTab?.type === 'home' && (
+                  <HomeView
+                    savedConnections={savedConnections}
+                    activeConnection={activeConnection}
+                    onConnect={handleConnect}
+                    onEditConnection={handleEditConnection}
+                    onDeleteConnection={handleDeleteConnection}
+                    onOpenNewConnection={handleOpenNewConnection}
+                    onOpenNewQuery={handleOpenNewQuery}
+                    onOpenBackup={() => handleOpenBackup()}
+                    onOpenServices={handleOpenServerManager}
+                    isLoading={isLoading}
+                  />
+                )}
+
+                {currentTab?.type === 'backup' && (
+                  <BackupTab
+                    connection={activeConnection}
+                    savedConnections={savedConnections}
+                    defaultDatabase={currentTab.databaseName || activeDatabase || activeConnection?.database}
+                    defaultTable={currentTab.tableName}
+                    initialMode={currentTab.backupMode || 'backup'}
+                    onSwitchConnection={handleConnect}
+                    onSuccess={() => showToast('Operação de backup/restauração finalizada com sucesso!', 'success')}
+                  />
+                )}
+
+                {currentTab?.type === 'services' && (
+                  <ServicesTab />
+                )}
+
+                {currentTab?.type === 'query' && (
+                  <>
+                    <SqlEditor
+                      query={currentTab.query || ''}
+                      onQueryChange={handleQueryChange}
+                      onExecute={handleExecuteQuery}
+                      isLoading={currentTab.isLoading || false}
+                      tableName={selectedTable || undefined}
+                      isCollapsed={isEditorCollapsed}
+                      onToggleCollapse={() => setIsEditorCollapsed(!isEditorCollapsed)}
+                      height={isEditorCollapsed ? undefined : editorHeight}
+                      dbType={activeConnection?.type}
+                      columnsMeta={currentTab?.columnsMeta || []}
+                    />
+
+                    {/* Resizable Splitter */}
+                    {!isEditorCollapsed && (
+                      <div
+                        onMouseDown={handleSplitterMouseDown}
+                        className="h-2 w-full flex items-center justify-center cursor-row-resize select-none my-0.5 hover:bg-amber-100/60 rounded-full transition-colors group flex-shrink-0"
+                        title="Arraste para redimensionar o Editor SQL e a Grid de Dados"
+                      >
+                        <div className="w-12 h-1 rounded-full bg-zinc-300 group-hover:bg-amber-500 transition-colors" />
+                      </div>
+                    )}
+
+                    {/* Results Grid */}
+                    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                      <DataGrid
+                        title="Resultados da Consulta"
+                        queryResult={currentTab?.queryResult || null}
+                        columnsMeta={currentTab?.columnsMeta || []}
+                        isLoading={currentTab?.isLoading || false}
+                        isLoadingMore={currentTab?.isLoadingMore || false}
+                        onUpdateRow={handleUpdateRow}
+                        onDeleteRow={handleDeleteRow}
+                        onOpenAddRow={() => setIsAddRowDrawerOpen(true)}
+                        onExportCsv={() => handleExport('csv')}
+                        onExportExcel={() => handleExport('xlsx')}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {(currentTab?.type === 'table' || currentTab?.type === 'view') && (
+                  <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                    <DataGrid
+                      title={`Tabela: ${currentTab?.tableName || selectedTable || ''}`}
+                      queryResult={currentTab?.queryResult || null}
+                      columnsMeta={currentTab?.columnsMeta || []}
+                      isLoading={currentTab?.isLoading || false}
+                      isLoadingMore={currentTab?.isLoadingMore || false}
+                      onLoadMore={handleLoadMore}
+                      onUpdateRow={handleUpdateRow}
+                      onDeleteRow={handleDeleteRow}
+                      onOpenAddRow={() => setIsAddRowDrawerOpen(true)}
+                      onExportCsv={() => handleExport('csv')}
+                      onExportExcel={() => handleExport('xlsx')}
+                    />
                   </div>
                 )}
-              </>
-            )}
-
-            {/* Results Grid - Takes all remaining height */}
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <DataGrid
-                title={
-                  currentTab?.type === 'query'
-                    ? 'Resultados da Consulta'
-                    : `Tabela: ${currentTab?.tableName || selectedTable || ''}`
-                }
-                queryResult={currentTab?.queryResult || null}
-                columnsMeta={currentTab?.columnsMeta || []}
-                isLoading={currentTab?.isLoading || false}
-                isLoadingMore={currentTab?.isLoadingMore || false}
-                onLoadMore={currentTab?.type !== 'query' ? handleLoadMore : undefined}
-                onUpdateRow={handleUpdateRow}
-                onDeleteRow={handleDeleteRow}
-                onOpenAddRow={() => setIsAddRowDrawerOpen(true)}
-                onExportCsv={() => handleExport('csv')}
-                onExportExcel={() => handleExport('xlsx')}
-              />
-            </div>
+              </div>
+            </main>
           </div>
-        </main>
         </div>
-      </div>
 
-      {/* Status Bar */}
-      <StatusBar
-        activeConnection={activeConnection}
-        queryResult={currentTab?.queryResult || null}
-        isLoading={currentTab?.isLoading || false}
-        selectedTable={currentTab?.tableName || selectedTable}
-        onExportCsv={() => handleExport('csv')}
-        onExportExcel={() => handleExport('xlsx')}
-      />
+        {/* Status Bar */}
+        <StatusBar
+          activeConnection={activeConnection}
+          queryResult={currentTab?.queryResult || null}
+          isLoading={currentTab?.isLoading || false}
+          selectedTable={currentTab?.tableName || selectedTable}
+          onExportCsv={() => handleExport('csv')}
+          onExportExcel={() => handleExport('xlsx')}
+        />
       </div>
 
       {/* Floating AI & Quick SQL Assistant Button */}
@@ -1070,11 +1205,16 @@ export const App: React.FC = () => {
         isLoading={currentTab?.isLoading || false}
       />
 
-      {/* Drawers */}
+      {/* Drawers & DDL Modal */}
       <ConnectionDrawer
         isOpen={isConnectionDrawerOpen}
-        onClose={() => setIsConnectionDrawerOpen(false)}
+        onClose={() => {
+          setIsConnectionDrawerOpen(false);
+          setEditingConnection(null);
+        }}
         onConnect={handleConnect}
+        onSaveEdit={handleSaveEditConnection}
+        initialConnection={editingConnection}
       />
 
       {(currentTab?.tableName || selectedTable) && (
@@ -1087,21 +1227,6 @@ export const App: React.FC = () => {
           onSave={handleAddRow}
         />
       )}
-      {/* SGBD Modals */}
-      <BackupRestoreModal
-        isOpen={isBackupModalOpen}
-        onClose={() => setIsBackupModalOpen(false)}
-        mode={backupModalMode}
-        connection={activeConnection}
-        defaultDatabase={backupDatabaseTarget}
-        defaultTable={backupTableTarget}
-        onSuccess={() => showToast(backupModalMode === 'backup' ? 'Backup gerado com sucesso!' : 'Restauração concluída!', 'success')}
-      />
-
-      <ServerManagerDrawer
-        isOpen={isServerManagerOpen}
-        onClose={() => setIsServerManagerOpen(false)}
-      />
 
       <DdlModal
         isOpen={ddlModal.isOpen}

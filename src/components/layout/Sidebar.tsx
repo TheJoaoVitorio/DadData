@@ -24,7 +24,8 @@ import {
   Server,
   Code2,
   Trash2,
-  Pencil
+  Pencil,
+  Home
 } from 'lucide-react';
 import { TableInfo, ConnectionConfig, ColumnInfo } from '@shared/types/database';
 import { DatabaseIcon } from '../icons/DatabaseIcon';
@@ -47,6 +48,7 @@ interface SidebarProps {
   onDeleteConnection?: (connId: string) => void;
   onOpenNewQuery: () => void;
   onOpenNewConnection: () => void;
+  onOpenHome?: () => void;
   onRefreshSchema: () => void;
   onOpenBackup?: (dbName?: string, tableName?: string) => void;
   onOpenRestore?: (dbName?: string) => void;
@@ -91,6 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteConnection,
   onOpenNewQuery,
   onOpenNewConnection,
+  onOpenHome,
   onRefreshSchema,
   onOpenBackup,
   onOpenRestore,
@@ -332,6 +335,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="w-80 bg-white text-zinc-700 flex overflow-hidden border-r border-zinc-200/90 select-none z-10 shrink-0">
       {/* 1. Leftmost Activity Rail (Clean Soft Neutral) */}
       <div className="w-11 bg-zinc-50/80 flex flex-col items-center py-3 border-r border-zinc-200/80 space-y-3 flex-shrink-0">
+        {/* Home / Central de Conexões */}
+        <button
+          onClick={() => onOpenHome && onOpenHome()}
+          title="Central de Conexões e Início (Home)"
+          className="p-2 rounded-xl text-zinc-400 hover:text-amber-600 hover:bg-zinc-200/60 transition-all cursor-pointer"
+        >
+          <Home className="w-4 h-4" />
+        </button>
+
         {/* Explorer icon */}
         <button
           onClick={() => setActiveRail('explorer')}
